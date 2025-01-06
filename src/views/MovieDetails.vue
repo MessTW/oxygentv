@@ -1,0 +1,398 @@
+<script setup>
+import { ref, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
+import VideoPlayer from '../components/VideoPlayer.vue';
+import FavoriteButton from '../components/FavoriteButton.vue';
+import ShareButton from '../components/ShareButton.vue';
+import { Icon } from '@iconify/vue';
+
+const API_KEY = 'd341436234a2bb8f0adc73114e093ab2';
+const BASE_URL = 'https://apitmdb.cub.red/3';
+
+const route = useRoute();
+const movie = ref(null);
+const loading = ref(true);
+
+const translateCastNames = async (cast) => {
+  try {
+    // Получаем русские данные о фильме с актерами
+    const ruResponse = await fetch(
+      `${BASE_URL}/movie/${route.params.id}/credits?api_key=${API_KEY}&language=ru-RU`
+    );
+    const ruData = await ruResponse.json();
+    
+    // Создаем мапу русских имен по id актера
+    const ruNamesMap = new Map(
+      ruData.cast.map(actor => [actor.id, actor.name])
+    );
+    
+    // Возвращаем русские имена, если есть, иначе оригинальные
+    return cast.map(actor => ({
+      ...actor,
+      name: ruNamesMap.get(actor.id) || actor.name
+    }));
+  } catch (error) {
+    console.error('Error translating names:', error);
+    return cast;
+  }
+};
+
+const fetchMovieDetails = async () => {
+  try {
+    const [detailsResponse] = await Promise.all([
+      fetch(`${BASE_URL}/movie/${route.params.id}?api_key=${API_KEY}&language=ru-RU&append_to_response=credits`)
+    ]);
+    
+    const [details] = await Promise.all([
+      detailsResponse.json()
+    ]);
+    
+    // Получаем дополнительную информацию о фильме, включая release_quality
+    const movieInfoResponse = await fetch(
+      `${BASE_URL}/discover/movie?api_key=${API_KEY}&language=ru-RU`
+    );
+    const movieInfo = await movieInfoResponse.json();
+    const currentMovie = movieInfo.results?.find(m => m.id === details.id);
+    
+    movie.value = {
+      ...details,
+      release_quality: currentMovie?.release_quality
+    };
+    console.log('Movie details:', movie.value);
+  } catch (error) {
+    console.error('Error:', error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const getCurrentUrl = () => window.location.href;
+
+const getQualityText = (quality) => {
+  switch (quality) {
+    case 'HD':
+      return 'HD';
+    case 'FHD':
+      return 'Full HD';
+    case '4K':
+      return '4K UHD';
+    case 'webdl':
+      return 'WEB-DL';
+    case 'ts':
+      return 'TS';
+    case 'cam':
+      return 'CAM';
+    case 'web':
+      return 'WEB';
+    case 'dvdrip':
+      return 'DVDRip';
+    case 'bdrip':
+      return 'BDRip';
+    case 'hdrip':
+      return 'HDRip';
+    case 'webrip':
+      return 'WEBRip';
+    case 'tvrip':
+      return 'TVRip';
+    case 'hdtv':
+      return 'HDTV';
+    case 'bluray':
+      return 'Blu-ray';
+    case 'remux':
+      return 'Remux';
+    case 'uhd':
+      return 'UHD';
+    case 'sd':
+      return 'SD';
+    case 'dvd':
+      return 'DVD';
+    case 'screener':
+      return 'Screener';
+    case 'tc':
+      return 'TC';
+    default:
+      return quality || 'Неизвестно';
+  }
+};
+
+onMounted(() => {
+  fetchMovieDetails();
+});
+</script>
+
+<template>
+  <div class="movie-details">
+    <div class="backdrop" :style="{ backgroundImage: `url(https://imagetmdb.com/t/p/original${movie?.backdrop_path})` }">
+    </div>
+    <div v-if="loading" class="loading">
+      <div class="loader"></div>
+    </div>
+    <div v-else-if="movie">
+      <div class="content">
+        <h1 class="details-title">{{ movie.title }}</h1>
+        <div class="content-wrapper">
+          <div class="left-column">
+            <div class="buttons-group">
+              <VideoPlayer 
+                :id="movie.id.toString()"
+                type="movie"
+                :title="movie.title"
+                class="watch-button"
+              />
+              <div class="secondary-buttons">
+                <FavoriteButton 
+                  :item="movie"
+                  type="movie"
+                />
+                <ShareButton 
+                  :url="getCurrentUrl()"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="right-column">
+            <div class="header-ratings">
+              <div class="rating-item">
+                <span class="rating-value">{{ movie.vote_average.toFixed(1) }}</span>
+              </div>
+              <span class="year">{{ new Date(movie.release_date).getFullYear() }}</span>
+              <span class="quality">
+                {{ getQualityText(movie.release_quality) }}
+              </span>
+              <div class="country-item" v-if="movie.production_countries?.[0]">
+                <Icon 
+                  :icon="`circle-flags:${movie.production_countries[0].iso_3166_1.toLowerCase()}`" 
+                  class="flag-icon"
+                />
+              </div>
+              <span class="genres">
+                {{ movie.genres?.map(genre => genre.name).join(', ') }}
+              </span>
+            </div>
+
+            <p class="overview">{{ movie.overview }}</p>
+
+            <div class="credits">
+              <div class="credit-section">
+                <h3>Режиссеры:</h3>
+                <div class="actors-list">
+                  {{ movie.credits?.crew?.filter(person => person.job === 'Director').map(director => director.name).join(', ') }}
+                </div>
+              </div>
+              <div class="credit-section">
+                <h3>В ролях:</h3>
+                <div class="actors-list">
+                  {{ movie.credits?.cast?.slice(0, 5).map(actor => actor.name).join(', ') }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.movie-details {
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+.backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  background-size: cover;
+  background-position: center;
+  filter: brightness(0.5);
+  z-index: -1;
+}
+
+.backdrop::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.7) 50%,
+    rgba(0, 0, 0, 0.9) 100%
+  );
+}
+
+.content {
+  padding: 3rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  position: relative;
+  min-height: 100vh;
+  z-index: 1;
+}
+
+.content-wrapper {
+  display: flex;
+  gap: 4rem;
+  margin-top: 2rem;
+}
+
+.left-column {
+  flex: 1;
+  max-width: 400px;
+}
+
+.right-column {
+  flex: 2;
+}
+
+.buttons-group {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.secondary-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.action-button {
+  width: 48px;
+  height: 48px;
+  padding: 0.8rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.action-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.details-title {
+  font-size: 3.5rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  color: var(--text-primary);
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.watch-button {
+  width: 100%;
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  transition: background-color 0.2s ease;
+  border-radius: 8px;
+}
+
+.watch-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.overview {
+  font-size: 1.1rem;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  max-width: 800px;
+  margin-bottom: 2rem;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.header-ratings {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  height: 32px;
+}
+
+.rating-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 100%;
+}
+
+.rating-value {
+  font-size: 1.2rem;
+  font-weight: 600;
+  line-height: 32px;
+}
+
+.rating-icon {
+  font-size: 24px;
+  color: #f5c518;
+}
+
+.year, .genres, .quality {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.country-item {
+  height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.flag-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.credit-section {
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.credit-section h3 {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.actors-list {
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+@media (max-width: 768px) {
+  .content-wrapper {
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .left-column {
+    max-width: 100%;
+  }
+}
+
+.quality {
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 0 12px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+</style> 
