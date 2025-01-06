@@ -57,9 +57,21 @@ const isFavorite = () => {
   justify-content: center;
   gap: 0.5rem;
   color: white;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 .favorite-button:hover {
   background-color: rgba(255, 255, 255, 0.2);
+}
+
+.favorite-button.active {
+  color: #e50914;
+}
+
+@media (max-width: 768px) {
+  .favorite-button {
+    padding: 8px;
+  }
 }
 </style> 

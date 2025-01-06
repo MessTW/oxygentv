@@ -1,14 +1,20 @@
 <script setup>
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, watch } from 'vue';
+import { RouterLink, RouterView, useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
 
-const router = useRouter();
+const route = useRoute();
+const showSidebar = ref(true);
+
+watch(() => route.query.hideMenu, (newVal) => {
+  showSidebar.value = !newVal;
+}, { immediate: true });
 </script>
 
 <template>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <div class="app-container">
-    <aside class="sidebar">
+    <aside class="sidebar" v-show="showSidebar">
       <div class="logo">N</div>
       <nav>
         <RouterLink to="/" class="nav-item" title="Главная">
@@ -46,6 +52,8 @@ const router = useRouter();
   --text-primary: #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.7);
   --blur-bg: rgba(0, 0, 0, 0.7);
+  --mobile-padding: 1rem;
+  --mobile-bottom-offset: 60px;
 }
 
 body {
@@ -53,6 +61,7 @@ body {
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 /* Общие стили */
@@ -60,13 +69,15 @@ body {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 /* Контейнер приложения */
 .app-container {
   display: flex;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 /* Стили для бокового меню */
@@ -156,14 +167,18 @@ nav {
 .main-content {
   flex: 1;
   margin-left: 60px;
+  min-height: 100vh;
+  width: 100%;
 }
 
 /* Адаптивность */
 @media (max-width: 768px) {
   .sidebar {
-    width: 100%;
-    height: 60px;
+    height: var(--mobile-bottom-offset);
     bottom: 0;
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-around;
     padding: 0;
   }
 
@@ -201,7 +216,10 @@ nav {
 
   .main-content {
     margin-left: 0;
-    margin-bottom: 60px;
+    padding: var(--mobile-padding);
+    padding-bottom: calc(var(--mobile-bottom-offset) + 1rem);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }
 
@@ -209,13 +227,8 @@ nav {
 .content-card, .movie-card, .series-card {
   position: relative;
   cursor: pointer;
-  transition: transform 0.2s;
   border-radius: 8px;
   overflow: hidden;
-}
-
-.content-card:hover, .movie-card:hover, .series-card:hover {
-  transform: scale(1.05);
 }
 
 .content-card img, .movie-card img, .series-card img {
@@ -323,11 +336,9 @@ nav {
   background-color: var(--surface);
   border-radius: 8px;
   overflow: hidden;
-  transition: all 0.2s ease;
 }
 
 .content-card:hover {
-  transform: translateY(-4px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 

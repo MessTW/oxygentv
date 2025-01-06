@@ -4,6 +4,9 @@ import { useRouter } from 'vue-router';
 import { useFavoritesStore } from '../stores/favorites';
 import { Icon } from '@iconify/vue';
 
+const API_KEY = 'd341436234a2bb8f0adc73114e093ab2';
+const BASE_URL = 'https://apitmdb.cub.red/3';
+
 const router = useRouter();
 const favoritesStore = useFavoritesStore();
 
@@ -36,7 +39,7 @@ onMounted(() => {
       <h2>Избранные фильмы</h2>
       <div class="content-grid">
         <div v-for="movie in favoritesStore.movies" :key="movie.id" class="movie-card" @click="showMovieDetails(movie)">
-          <img :src="`https://imagetmdb.com/t/p/w500${movie.backdrop_path}`" :alt="movie.title"
+          <img :src="`https://imagetmdb.com/t/p/w500${movie.poster_path}`" :alt="movie.title"
             @error="$event.target.src = '/placeholder-poster.jpg'">
           <button class="favorite-button active" @click="(e) => toggleFavoriteMovie(e, movie)"
             title="Удалить из избранного">
@@ -56,19 +59,19 @@ onMounted(() => {
     <section class="favorites-section" v-if="favoritesStore.series.length > 0">
       <h2>Избранные сериалы</h2>
       <div class="content-grid">
-        <div v-for="series in favoritesStore.series" :key="series.id" class="series-card" @click="showSeriesDetails(series)">
-          <img :src="`https://imagetmdb.com/t/p/w500${series.backdrop_path}`" :alt="series.name"
+        <div v-for="show in favoritesStore.series" :key="show.id" class="series-card" @click="showSeriesDetails(show)">
+          <img :src="`https://imagetmdb.com/t/p/w500${show.poster_path}`" :alt="show.name"
             @error="$event.target.src = '/placeholder-poster.jpg'">
-          <button class="favorite-button active" @click="(e) => toggleFavoriteSeries(e, series)"
+          <button class="favorite-button active" @click="(e) => toggleFavoriteSeries(e, show)"
             title="Удалить из избранного">
             <Icon icon="mdi:heart" width="24" />
           </button>
           <div class="series-overlay">
             <div class="meta-info">
-              <span class="year">{{ series.first_air_date?.split('-')[0] }}</span>
-              <span class="rating">★ {{ series.vote_average.toFixed(1) }}</span>
+              <span class="year">{{ show.first_air_date?.split('-')[0] }}</span>
+              <span class="rating">★ {{ show.vote_average.toFixed(1) }}</span>
             </div>
-            <h3 class="series-title">{{ series.name }}</h3>
+            <h3 class="series-title">{{ show.name }}</h3>
           </div>
         </div>
       </div>
@@ -98,8 +101,16 @@ onMounted(() => {
 
 .content-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 2rem;
+}
+
+/* Оптимизация для мобильных устройств */
+@media (max-width: 768px) {
+  .content-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+  }
 }
 
 .empty-favorites {
@@ -119,5 +130,95 @@ onMounted(() => {
 .empty-favorites p {
   max-width: 400px;
   line-height: 1.5;
+}
+
+.movie-card img,
+.series-card img {
+  width: 100%;
+  aspect-ratio: 2/3;
+  object-fit: cover;
+  display: block;
+}
+
+.movie-card:hover img,
+.series-card:hover img {
+  filter: brightness(0.7);
+}
+
+.movie-card,
+.series-card {
+  position: relative;
+  cursor: pointer;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 3px solid transparent;
+  transition: border-color 0.2s ease;
+}
+
+.movie-card:hover,
+.series-card:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.favorite-button {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  z-index: 10;
+  opacity: 0;
+}
+
+.movie-card:hover .favorite-button,
+.series-card:hover .favorite-button {
+  opacity: 1;
+}
+
+.favorite-button.active {
+  color: #e50914;
+  opacity: 1;
+}
+
+.favorite-button:hover {
+  transform: scale(1.2);
+}
+
+.movie-overlay,
+.series-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  z-index: 1;
+}
+
+.meta-info {
+  background: linear-gradient(rgba(0, 0, 0, 0.6), transparent);
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.movie-title,
+.series-title {
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  padding: 1rem;
+  margin: 0;
+  color: white;
+  font-size: 0.9rem;
+}
+
+.rating, 
+.year {
+  color: white;
 }
 </style> 

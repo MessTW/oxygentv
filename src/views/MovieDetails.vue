@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import VideoPlayer from '../components/VideoPlayer.vue';
 import FavoriteButton from '../components/FavoriteButton.vue';
 import ShareButton from '../components/ShareButton.vue';
@@ -10,8 +10,24 @@ const API_KEY = 'd341436234a2bb8f0adc73114e093ab2';
 const BASE_URL = 'https://apitmdb.cub.red/3';
 
 const route = useRoute();
+const router = useRouter();
 const movie = ref(null);
 const loading = ref(true);
+
+const handlePlayerOpen = () => {
+  router.push({ 
+    query: { 
+      ...route.query,
+      hideMenu: 'true'
+    }
+  });
+};
+
+const handlePlayerClose = () => {
+  const query = { ...route.query };
+  delete query.hideMenu;
+  router.push({ query });
+};
 
 const translateCastNames = async (cast) => {
   try {
@@ -138,6 +154,8 @@ onMounted(() => {
                 type="movie"
                 :title="movie.title"
                 class="watch-button"
+                @player-opened="handlePlayerOpen"
+                @player-closed="handlePlayerClose"
               />
               <div class="secondary-buttons">
                 <FavoriteButton 

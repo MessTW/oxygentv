@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import VideoPlayer from '../components/VideoPlayer.vue';
 import FavoriteButton from '../components/FavoriteButton.vue';
 import ShareButton from '../components/ShareButton.vue';
@@ -10,8 +10,24 @@ const API_KEY = 'd341436234a2bb8f0adc73114e093ab2';
 const BASE_URL = 'https://apitmdb.cub.red/3';
 
 const route = useRoute();
+const router = useRouter();
 const series = ref(null);
 const loading = ref(true);
+
+const handlePlayerOpen = () => {
+  router.push({ 
+    query: { 
+      ...route.query,
+      hideMenu: 'true'
+    }
+  });
+};
+
+const handlePlayerClose = () => {
+  const query = { ...route.query };
+  delete query.hideMenu;
+  router.push({ query });
+};
 
 const getSeasonText = (count) => {
   if (count === 1) return 'сезон';
@@ -144,6 +160,8 @@ onMounted(() => {
                 type="tv"
                 :title="series.name"
                 class="watch-button"
+                @player-opened="handlePlayerOpen"
+                @player-closed="handlePlayerClose"
               />
               <div class="secondary-buttons">
                 <FavoriteButton 

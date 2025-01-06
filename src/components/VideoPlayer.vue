@@ -21,6 +21,7 @@ const props = defineProps({
   }
 });
 
+const emit = defineEmits(['playerOpened', 'playerClosed']);
 const showPlayer = ref(false);
 const playerContainer = ref(null);
 
@@ -50,7 +51,10 @@ const initPlayer = () => {
 const openPlayer = () => {
   showPlayer.value = !showPlayer.value;
   if (showPlayer.value) {
+    emit('playerOpened');
     setTimeout(initPlayer, 100);
+  } else {
+    emit('playerClosed');
   }
 };
 </script>
@@ -70,7 +74,9 @@ const openPlayer = () => {
         </button>
       </div>
       <div class="mui-player-container">
-        <div ref="playerContainer"></div>
+        <div ref="playerContainer" class="player-container">
+          <div class="touch-overlay"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -131,6 +137,7 @@ const openPlayer = () => {
   box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2),
              0px 4px 5px 0px rgba(0,0,0,0.14),
              0px 1px 10px 0px rgba(0,0,0,0.12);
+  border-bottom: 1px solid var(--border);
 }
 
 .mui-typography {
@@ -216,6 +223,42 @@ const openPlayer = () => {
   .mui-modal-content {
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+.player-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.touch-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .mui-app-bar {
+    min-height: 48px;
+  }
+
+  .mui-typography {
+    font-size: 0.875rem;
+  }
+
+  .mui-icon-button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+  }
+
+  .player-container iframe {
+    pointer-events: auto;
   }
 }
 </style> 

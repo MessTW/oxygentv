@@ -43,33 +43,15 @@ const fetchMovies = async (genreId = '', page = 1) => {
       movie.title && 
       movie.title.trim() !== '' && 
       movie.overview && 
-      movie.overview.trim() !== '' &&
-      !movie.title.includes('[') &&
-      !movie.title.includes(']') &&
-      movie.backdrop_path
+      movie.overview.trim() !== ''
     );
 
-    const moviesWithLogos = await Promise.all(
-      filteredResults.map(async (movie) => {
-        const detailsResponse = await fetch(
-          `${BASE_URL}/movie/${movie.id}/images?api_key=${API_KEY}&include_image_language=ru,en,null`
-        );
-        const details = await detailsResponse.json();
-        const russianLogo = details.logos?.find(logo => logo.iso_639_1 === 'ru');
-        const defaultLogo = details.logos?.[0];
-        return {
-          ...movie,
-          logoPath: (russianLogo || defaultLogo)?.file_path || null
-        };
-      })
-    );
-    movies.value = moviesWithLogos;
-    
+    movies.value = filteredResults;
     totalPages.value = data.total_pages;
     currentPage.value = page;
     selectedGenre.value = genreId;
   } catch (error) {
-    console.error('Erro ao buscar filmes:', error);
+    console.error('Error:', error);
   } finally {
     loading.value = false;
   }
@@ -92,21 +74,51 @@ const searchMovies = async () => {
       movie.overview && movie.overview.trim() !== ''
     );
 
-    const moviesWithLogos = await Promise.all(
+    const moviesWithBackdrops = await Promise.all(
       filteredResults.map(async (movie) => {
-        const detailsResponse = await fetch(
+        const imagesResponse = await fetch(
           `${BASE_URL}/movie/${movie.id}/images?api_key=${API_KEY}&include_image_language=ru,en,null`
         );
-        const details = await detailsResponse.json();
-        const russianLogo = details.logos?.find(logo => logo.iso_639_1 === 'ru');
-        const defaultLogo = details.logos?.[0];
+        const imagesData = await imagesResponse.json();
+        
+        let textlessBackdrop = imagesData.backdrops?.find(
+          backdrop => backdrop.iso_639_1 === 'ru' && 
+          backdrop.width === 3840 && 
+          backdrop.height === 2160
+        );
+        
+        if (!textlessBackdrop) {
+          textlessBackdrop = imagesData.backdrops?.find(
+            backdrop => backdrop.iso_639_1 === 'en' && 
+            backdrop.width === 3840 && 
+            backdrop.height === 2160
+          );
+        }
+        
+        if (!textlessBackdrop) {
+          textlessBackdrop = imagesData.backdrops?.find(
+            backdrop => backdrop.iso_639_1 === 'ru'
+          );
+        }
+        
+        if (!textlessBackdrop) {
+          textlessBackdrop = imagesData.backdrops?.find(
+            backdrop => backdrop.iso_639_1 === 'en'
+          );
+        }
+        
+        if (!textlessBackdrop && imagesData.backdrops?.length > 0) {
+          textlessBackdrop = imagesData.backdrops[0];
+        }
+        
         return {
           ...movie,
-          logoPath: (russianLogo || defaultLogo)?.file_path || null
+          backdrop_with_text: textlessBackdrop?.file_path || movie.poster_path
         };
       })
     );
-    movies.value = moviesWithLogos;
+
+    movies.value = moviesWithBackdrops;
     totalPages.value = data.total_pages;
   } catch (error) {
     console.error('Error:', error);
@@ -150,15 +162,19 @@ const toggleFavorite = (event, movie) => {
   <div class="movies">
     <div class="filters">
       <div class="search-container">
-        <input type="text" v-model="searchQuery" @keyup.enter="searchMovies" placeholder="Поиск фильмов...">
-        <button @click="searchMovies">Поиск</button>
+        <div class="search-wrapper">
+          <input type="text" v-model="searchQuery" @keyup.enter="searchMovies" placeholder="Поиск фильмов...">
+          <button @click="searchMovies">
+            <Icon icon="mdi:magnify" width="24" />
+          </button>
+        </div>
       </div>
 
       <div class="genres">
-        <button @click="fetchMovies('', 1)" :class="{ active: !selectedGenre }">
-          Todos
+        <button class="genre-button" @click="fetchMovies('', 1)" :class="{ active: !selectedGenre }">
+          Все
         </button>
-        <button v-for="genre in genres" :key="genre.id" @click="fetchMovies(genre.id, 1)"
+        <button class="genre-button" v-for="genre in genres" :key="genre.id" @click="fetchMovies(genre.id, 1)"
           :class="{ active: selectedGenre === genre.id }">
           {{ genre.name }}
         </button>
@@ -171,7 +187,7 @@ const toggleFavorite = (event, movie) => {
 
     <div v-else class="movies-grid">
       <div v-for="movie in movies" :key="movie.id" class="movie-card" @click="showMovieDetails(movie)">
-        <img :src="`https://imagetmdb.com/t/p/w500${movie.backdrop_path}`" :alt="movie.title"
+        <img :src="`https://imagetmdb.com/t/p/w500${movie.poster_path}`" :alt="movie.title"
           @error="$event.target.src = '/placeholder-poster.jpg'">
         <button 
           class="favorite-button" 
@@ -195,11 +211,14 @@ const toggleFavorite = (event, movie) => {
     </div>
 
 
-    <div class="pagination" v-if="totalPages > 1">
+    <div class="pagination" v-show="totalPages > 1">
       <button :disabled="currentPage === 1" @click="changePage(currentPage - 1)">
         Предыдущая
       </button>
-      <span>Страница {{ currentPage }} из {{ totalPages }}</span>
+      <div class="page-info">
+        <span class="page-label">Страница</span>
+        <span class="page-numbers">{{ currentPage }}</span>
+      </div>
       <button :disabled="currentPage === totalPages" @click="changePage(currentPage + 1)">
         Следующая
       </button>
@@ -209,72 +228,139 @@ const toggleFavorite = (event, movie) => {
 
 <style scoped>
 .movies {
-  padding: 1rem;
+  padding: var(--mobile-padding);
 }
 
 .filters {
-  margin-bottom: 2rem;
+  padding: 0;
+  margin-bottom: 1rem;
 }
 
 .search-container {
   margin-bottom: 1rem;
   display: flex;
   gap: 0.5rem;
+  justify-content: center;
+}
+
+.search-wrapper {
+  display: flex;
+  gap: 0.5rem;
+  max-width: 600px;
+  width: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 0.5rem;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
 }
 
 .search-container input {
   flex: 1;
-  padding: 0.5rem;
+  padding: 0.5rem 1rem;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   background-color: rgba(255, 255, 255, 0.1);
   color: white;
+  font-size: 1rem;
+}
+
+.search-container input:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 1px var(--ring);
+}
+
+.search-container button {
+  padding: 0.5rem;
+  width: 40px;
+  height: 40px;
+  background-color: var(--button-bg);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.search-container button:hover {
+  background-color: var(--button-hover);
 }
 
 .genres {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 1rem;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
 }
 
-.genres button {
+.genre-button {
   padding: 0.5rem 1rem;
   background-color: rgba(255, 255, 255, 0.1);
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   color: white;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
 }
 
-.genres button.active {
-  background-color: #e50914;
+.genre-button:hover {
+  background-color: var(--button-hover);
+}
+
+.genre-button.active {
+  background-color: var(--button-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.genre-button.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: var(--accent);
 }
 
 .movies-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 2rem;
-  margin-bottom: 2rem;
+  margin-bottom: calc(var(--mobile-bottom-offset) + 2rem);
 }
 
 .movie-card {
   position: relative;
   cursor: pointer;
-  transition: transform 0.2s;
   border-radius: 8px;
   overflow: hidden;
+  border: 2px solid transparent;
+  transition: border-color 0.2s ease;
 }
 
 .movie-card:hover {
-  transform: scale(1.05);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .movie-card img {
   width: 100%;
-  aspect-ratio: 16/9;
+  aspect-ratio: 2/3;
   object-fit: cover;
   display: block;
+}
+
+.movie-card:hover img {
+  filter: brightness(0.7);
 }
 
 .movie-overlay {
@@ -286,10 +372,11 @@ const toggleFavorite = (event, movie) => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  z-index: 1;
 }
 
 .meta-info {
-  background: linear-gradient(rgba(0, 0, 0, 0.8), transparent);
+  background: linear-gradient(rgba(0, 0, 0, 0.6), transparent);
   padding: 1rem;
   display: flex;
   justify-content: space-between;
@@ -298,11 +385,11 @@ const toggleFavorite = (event, movie) => {
 }
 
 .movie-title {
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.9));
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
   padding: 1rem;
   margin: 0;
   color: white;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
 }
 
 .rating, .year {
@@ -310,25 +397,49 @@ const toggleFavorite = (event, movie) => {
 }
 
 .pagination {
+  position: fixed;
+  bottom: calc(var(--mobile-bottom-offset) + 1rem);
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  justify-content: center;
   gap: 1rem;
   align-items: center;
-  margin-top: 2rem;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+  z-index: 100;
 }
 
 .pagination button {
-  padding: 0.5rem 1rem;
-  background-color: #e50914;
+  padding: 0.5rem;
+  background-color: var(--button-bg);
   border: none;
   border-radius: 4px;
   color: white;
   cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 0.875rem;
+}
+
+.pagination button:hover:not(:disabled) {
+  background-color: var(--button-hover);
 }
 
 .pagination button:disabled {
-  background-color: #666;
+  opacity: 0.5;
   cursor: not-allowed;
+}
+
+.pagination span {
+  color: var(--text-secondary);
+}
+
+.movies-grid, .series-grid {
+  margin-bottom: 6rem;
 }
 
 .loading {
@@ -472,6 +583,41 @@ const toggleFavorite = (event, movie) => {
   .genres {
     justify-content: center;
   }
+
+  .movies {
+    padding: var(--mobile-padding);
+  }
+
+  .filters {
+    padding: 0;
+    margin-bottom: 1rem;
+  }
+
+  .movies-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: calc(var(--mobile-bottom-offset) + 2rem);
+  }
+
+  .movie-card {
+    border-width: 2px;
+  }
+
+  .movie-title {
+    font-size: 0.8rem;
+  }
+
+  .pagination {
+    bottom: calc(var(--mobile-bottom-offset) + 1rem);
+    padding: 0.75rem 1rem;
+  }
+
+  .pagination button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.5rem;
+    font-size: 0.875rem;
+  }
 }
 
 .favorite-button {
@@ -484,7 +630,6 @@ const toggleFavorite = (event, movie) => {
   cursor: pointer;
   z-index: 10;
   opacity: 0;
-  transition: opacity 0.3s ease, transform 0.2s ease;
 }
 
 .content-card:hover .favorite-button,
@@ -499,5 +644,23 @@ const toggleFavorite = (event, movie) => {
 
 .favorite-button:hover {
   transform: scale(1.2);
+}
+
+.page-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.page-label {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.page-numbers {
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 </style>
