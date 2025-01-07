@@ -11,7 +11,6 @@ workflows:
         script: |
           npm install
           npm install @capacitor/core @capacitor/cli @capacitor/android
-          npx cap init OxygeTV com.oxygetv.app --web-dir=dist
       
       - name: Build Web
         script: |
@@ -20,10 +19,25 @@ workflows:
       
       - name: Setup Android
         script: |
+          # Удаляем существующую платформу Android, если она есть
+          rm -rf android
+          # Создаем новый проект Capacitor
+          npx cap init OxygeTV com.oxygetv.app --web-dir=dist
+          # Добавляем Android платформу
           npx cap add android
+          # Синхронизируем изменения
           npx cap sync
-          ls -la android  # Проверяем, что папка android создана
-          ls -la android/gradlew  # Проверяем, что gradlew существует
+          # Проверяем структуру проекта
+          echo "=== Android directory structure ==="
+          ls -la android
+          echo "=== App directory structure ==="
+          ls -la android/app
+          echo "=== Checking gradlew ==="
+          if [ -f "android/gradlew" ]; then
+            echo "gradlew found"
+          else
+            echo "gradlew not found!"
+          fi
       
       - name: Generate keystore
         script: |
@@ -58,6 +72,8 @@ workflows:
             ./gradlew assembleRelease
           else
             echo "Error: gradlew not found"
+            echo "=== Current directory contents ==="
+            ls -la
             exit 1
           fi
     
