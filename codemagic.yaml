@@ -50,11 +50,11 @@ workflows:
       - name: Update Gradle Config
         script: |
           if [ -f "android/app/build.gradle" ]; then
-            # Сначала сохраним оригинальный файл
+            # Сохраняем оригинальный файл
             cp android/app/build.gradle android/app/build.gradle.bak
             
-            # Создадим новый файл build.gradle
-            cat > android/app/build.gradle << 'EOF'
+            # Создаем временный файл с конфигурацией
+            tee android/app/build.gradle > /dev/null << "ENDCONFIG"
 apply plugin: 'com.android.application'
 
 android {
@@ -102,7 +102,7 @@ dependencies {
     implementation project(':capacitor-android')
     implementation project(':capacitor-cordova-android-plugins')
 }
-EOF
+ENDCONFIG
 
             echo "=== New build.gradle contents ==="
             cat android/app/build.gradle
