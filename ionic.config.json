@@ -1,7 +1,0 @@
-{
-  "name": "axios",
-  "integrations": {
-    "capacitor": {}
-  },
-  "type": "custom"
-}
