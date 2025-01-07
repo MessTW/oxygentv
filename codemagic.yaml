@@ -15,19 +15,14 @@ workflows:
       - name: Build Web
         script: |
           npm run build
-          ls -la dist  # Проверяем, что папка dist создана
+          ls -la dist
       
       - name: Setup Android
         script: |
-          # Удаляем существующую платформу Android, если она есть
           rm -rf android
-          # Создаем новый проект Capacitor
           npx cap init OxygeTV com.oxygetv.app --web-dir=dist
-          # Добавляем Android платформу
           npx cap add android
-          # Синхронизируем изменения
           npx cap sync
-          # Проверяем структуру проекта
           echo "=== Android directory structure ==="
           ls -la android
           echo "=== App directory structure ==="
@@ -55,10 +50,24 @@ workflows:
       - name: Update Gradle Config
         script: |
           if [ -f "android/app/build.gradle" ]; then
-            echo "android.signingConfigs.release.storeFile=../keystore.jks" >> android/app/build.gradle
-            echo "android.signingConfigs.release.storePassword=$CM_KEYSTORE_PASSWORD" >> android/app/build.gradle
-            echo "android.signingConfigs.release.keyAlias=upload" >> android/app/build.gradle
-            echo "android.signingConfigs.release.keyPassword=$CM_KEY_PASSWORD" >> android/app/build.gradle
+            cat << 'EOF' >> android/app/build.gradle
+
+android {
+    signingConfigs {
+        release {
+            storeFile file("../keystore.jks")
+            storePassword System.getenv("CM_KEYSTORE_PASSWORD")
+            keyAlias "upload"
+            keyPassword System.getenv("CM_KEY_PASSWORD")
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+        }
+    }
+}
+EOF
           else
             echo "Error: build.gradle not found"
             exit 1
@@ -69,7 +78,7 @@ workflows:
           cd android
           if [ -f "gradlew" ]; then
             chmod +x gradlew
-            ./gradlew assembleRelease
+            ./gradlew assembleRelease --stacktrace --debug
           else
             echo "Error: gradlew not found"
             echo "=== Current directory contents ==="
