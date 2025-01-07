@@ -6,13 +6,11 @@ import { useContentStore } from '../stores/content';
 import { useUIStore } from '../stores/ui';
 import { Icon } from '@iconify/vue';
 import LazyImage from '../components/LazyImage.vue';
-import { storeToRefs } from 'pinia';
 
 const router = useRouter();
 const favoritesStore = useFavoritesStore();
 const contentStore = useContentStore();
 const uiStore = useUIStore();
-const { loading } = storeToRefs(uiStore);
 
 const activeTab = ref('movie'); // 'movie' или 'tv'
 
