@@ -10,6 +10,7 @@ workflows:
       - name: Install dependencies
         script: |
           npm install
+          npm install -D typescript @types/node
           npm install @capacitor/core @capacitor/cli @capacitor/android
           npx cap init OxygeTV com.oxygetv.app
       
@@ -52,4 +53,4 @@ workflows:
     publishing:
       email:
         recipients:
-          - rzl44610@bcooq.com  # Замените на вашу почту
+          - rzl44610@bcooq.com
