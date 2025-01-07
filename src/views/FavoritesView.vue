@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useFavoritesStore } from '../stores/favorites';
 import { Icon } from '@iconify/vue';
+import LazyImage from '../components/LazyImage.vue';
 
 const API_KEY = 'd341436234a2bb8f0adc73114e093ab2';
 const BASE_URL = 'https://apitmdb.cub.red/3';
@@ -39,8 +40,10 @@ onMounted(() => {
       <h2>Избранные фильмы</h2>
       <div class="content-grid">
         <div v-for="movie in favoritesStore.movies" :key="movie.id" class="movie-card" @click="showMovieDetails(movie)">
-          <img :src="`https://imagetmdb.com/t/p/w500${movie.poster_path}`" :alt="movie.title"
-            @error="$event.target.src = '/placeholder-poster.jpg'">
+          <LazyImage
+            :src="`https://imagetmdb.com/t/p/w500${movie.poster_path}`"
+            :alt="movie.title"
+          />
           <button class="favorite-button active" @click="(e) => toggleFavoriteMovie(e, movie)"
             title="Удалить из избранного">
             <Icon icon="mdi:heart" width="24" />
@@ -60,8 +63,10 @@ onMounted(() => {
       <h2>Избранные сериалы</h2>
       <div class="content-grid">
         <div v-for="show in favoritesStore.series" :key="show.id" class="series-card" @click="showSeriesDetails(show)">
-          <img :src="`https://imagetmdb.com/t/p/w500${show.poster_path}`" :alt="show.name"
-            @error="$event.target.src = '/placeholder-poster.jpg'">
+          <LazyImage
+            :src="`https://imagetmdb.com/t/p/w500${show.poster_path}`"
+            :alt="show.name"
+          />
           <button class="favorite-button active" @click="(e) => toggleFavoriteSeries(e, show)"
             title="Удалить из избранного">
             <Icon icon="mdi:heart" width="24" />
@@ -105,11 +110,34 @@ onMounted(() => {
   gap: 2rem;
 }
 
-/* Оптимизация для мобильных устройств */
 @media (max-width: 768px) {
   .content-grid {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+
+  .content-card {
+    border-radius: 6px;
+    border-width: 2px;
+  }
+
+  .content-overlay {
+    font-size: 0.8rem;
+  }
+
+  .meta-info {
+    padding: 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .content-title {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .empty-state {
+    font-size: 0.9rem;
+    padding: 2rem var(--mobile-padding);
   }
 }
 
@@ -217,8 +245,8 @@ onMounted(() => {
   font-size: 0.9rem;
 }
 
-.rating, 
+.rating,
 .year {
   color: white;
 }
-</style> 
+</style>
