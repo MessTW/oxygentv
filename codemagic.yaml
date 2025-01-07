@@ -5,7 +5,6 @@ workflows:
     environment:
       node: latest
       vars:
-<<<<<<< HEAD
         PACKAGE_NAME: "com.oxygetv.app"
     scripts:
       - name: Install dependencies
@@ -22,15 +21,6 @@ workflows:
           npx cap add android
           npx cap sync
       
-=======
-        # Определяем переменные здесь
-        PACKAGE_NAME: "com.oxygetv.app"
-    scripts:
-      - name: Install dependencies
-        script: npm install
-      - name: Build
-        script: npm run build
->>>>>>> 29ee1b224115e2cbd0fda8c7d2d6682aeb1831fa
       - name: Generate keystore
         script: |
           keytool -genkey -v \
@@ -43,7 +33,6 @@ workflows:
             -keypass $CM_KEY_PASSWORD \
             -dname "CN=OxygeTV, OU=Mobile, O=OxygeTV, L=Unknown, ST=Unknown, C=US" \
             -noprompt
-<<<<<<< HEAD
       
       - name: Update Gradle Config
         script: |
@@ -58,21 +47,9 @@ workflows:
           chmod +x gradlew
           ./gradlew assembleRelease
     
-=======
-      - name: Set up local properties
-        script: echo "sdk.dir=$ANDROID_SDK_ROOT" > "./android/local.properties"
-      - name: Build Android
-        script: |
-          cd android
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=../keystore.jks \
-            -Pandroid.injected.signing.store.password=$CM_KEYSTORE_PASSWORD \
-            -Pandroid.injected.signing.key.alias=upload \
-            -Pandroid.injected.signing.key.password=$CM_KEY_PASSWORD
->>>>>>> 29ee1b224115e2cbd0fda8c7d2d6682aeb1831fa
     artifacts:
       - android/app/build/outputs/**/*.apk
     publishing:
       email:
         recipients:
-          - your.email@example.com # Замените на вашу почту
+          - rzl44610@bcooq.com  # Замените на вашу почту
