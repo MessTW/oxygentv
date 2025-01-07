@@ -1,0 +1,55 @@
+workflows:
+  vue-android:
+    name: Vue Android
+    max_build_duration: 30
+    environment:
+      node: latest
+      vars:
+        PACKAGE_NAME: "com.oxygetv.app"
+    scripts:
+      - name: Install dependencies
+        script: |
+          npm install
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npx cap init OxygeTV com.oxygetv.app
+      
+      - name: Build
+        script: npm run build
+      
+      - name: Setup Capacitor
+        script: |
+          npx cap add android
+          npx cap sync
+      
+      - name: Generate keystore
+        script: |
+          keytool -genkey -v \
+            -keystore keystore.jks \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -alias upload \
+            -storepass $CM_KEYSTORE_PASSWORD \
+            -keypass $CM_KEY_PASSWORD \
+            -dname "CN=OxygeTV, OU=Mobile, O=OxygeTV, L=Unknown, ST=Unknown, C=US" \
+            -noprompt
+      
+      - name: Update Gradle Config
+        script: |
+          echo "android.signingConfigs.release.storeFile=../keystore.jks" >> android/app/build.gradle
+          echo "android.signingConfigs.release.storePassword=$CM_KEYSTORE_PASSWORD" >> android/app/build.gradle
+          echo "android.signingConfigs.release.keyAlias=upload" >> android/app/build.gradle
+          echo "android.signingConfigs.release.keyPassword=$CM_KEY_PASSWORD" >> android/app/build.gradle
+      
+      - name: Build Android
+        script: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+    
+    artifacts:
+      - android/app/build/outputs/**/*.apk
+    publishing:
+      email:
+        recipients:
+          - your.email@example.com # Замените на вашу почту
