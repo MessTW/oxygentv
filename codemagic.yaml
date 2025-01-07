@@ -4,8 +4,9 @@ workflows:
     max_build_duration: 30
     environment:
       node: latest
-      groups:
-        - keystore_credentials
+      vars:
+        # Определяем переменные здесь
+        PACKAGE_NAME: "com.oxygetv.app"
     scripts:
       - name: Install dependencies
         script: npm install
@@ -13,26 +14,23 @@ workflows:
         script: npm run build
       - name: Generate keystore
         script: |
-          echo $CM_KEYSTORE | base64 --decode > $CM_BUILD_DIR/keystore.jks
-          # Создаем keystore если его нет
-          if [ ! -f $CM_BUILD_DIR/keystore.jks ]; then
-            keytool -genkey -v \
-              -keystore $CM_BUILD_DIR/keystore.jks \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -alias upload \
-              -storepass $CM_KEYSTORE_PASSWORD \
-              -keypass $CM_KEY_PASSWORD \
-              -dname "CN=OxygeTV, OU=Mobile, O=OxygeTV, L=Unknown, ST=Unknown, C=US"
-          fi
+          keytool -genkey -v \
+            -keystore keystore.jks \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -alias upload \
+            -storepass $CM_KEYSTORE_PASSWORD \
+            -keypass $CM_KEY_PASSWORD \
+            -dname "CN=OxygeTV, OU=Mobile, O=OxygeTV, L=Unknown, ST=Unknown, C=US" \
+            -noprompt
       - name: Set up local properties
         script: echo "sdk.dir=$ANDROID_SDK_ROOT" > "./android/local.properties"
       - name: Build Android
         script: |
           cd android
           ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=$CM_BUILD_DIR/keystore.jks \
+            -Pandroid.injected.signing.store.file=../keystore.jks \
             -Pandroid.injected.signing.store.password=$CM_KEYSTORE_PASSWORD \
             -Pandroid.injected.signing.key.alias=upload \
             -Pandroid.injected.signing.key.password=$CM_KEY_PASSWORD
