@@ -50,23 +50,62 @@ workflows:
       - name: Update Gradle Config
         script: |
           if [ -f "android/app/build.gradle" ]; then
-            echo '
-              android {
-                  signingConfigs {
-                      release {
-                          storeFile file("../keystore.jks")
-                          storePassword System.getenv("CM_KEYSTORE_PASSWORD")
-                          keyAlias "upload"
-                          keyPassword System.getenv("CM_KEY_PASSWORD")
-                      }
-                  }
-                  buildTypes {
-                      release {
-                          signingConfig signingConfigs.release
-                      }
-                  }
-              }
-            ' >> android/app/build.gradle
+            # Сначала сохраним оригинальный файл
+            cp android/app/build.gradle android/app/build.gradle.bak
+            
+            # Создадим новый файл build.gradle
+            cat > android/app/build.gradle << 'EOF'
+apply plugin: 'com.android.application'
+
+android {
+    namespace "com.oxygetv.app"
+    compileSdkVersion 33
+    defaultConfig {
+        applicationId "com.oxygetv.app"
+        minSdkVersion 21
+        targetSdkVersion 33
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("../keystore.jks")
+            storePassword System.getenv("CM_KEYSTORE_PASSWORD")
+            keyAlias "upload"
+            keyPassword System.getenv("CM_KEY_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation "androidx.appcompat:appcompat:1.6.1"
+    implementation "androidx.core:core-ktx:1.9.0"
+    testImplementation "junit:junit:4.13.2"
+    androidTestImplementation "androidx.test.ext:junit:1.1.5"
+    androidTestImplementation "androidx.test.espresso:espresso-core:3.5.1"
+    implementation project(':capacitor-android')
+    implementation project(':capacitor-cordova-android-plugins')
+}
+EOF
+
+            echo "=== New build.gradle contents ==="
+            cat android/app/build.gradle
           else
             echo "Error: build.gradle not found"
             exit 1
@@ -74,10 +113,14 @@ workflows:
       
       - name: Build Android
         script: |
+          echo "=== Android project structure ==="
+          ls -R android/
+          
           cd android
           if [ -f "gradlew" ]; then
             chmod +x gradlew
-            ./gradlew assembleRelease --stacktrace --debug
+            ./gradlew tasks --all
+            ./gradlew assembleRelease --stacktrace --info
           else
             echo "Error: gradlew not found"
             echo "=== Current directory contents ==="
