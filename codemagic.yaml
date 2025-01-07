@@ -17,6 +17,19 @@ workflows:
           npm run build
           ls -la dist
       
+      - name: Verify Environment
+        script: |
+          echo "=== Checking environment variables ==="
+          if [ -z "$CM_KEYSTORE_PASSWORD" ]; then
+            echo "Error: CM_KEYSTORE_PASSWORD is not set"
+            exit 1
+          fi
+          if [ -z "$CM_KEY_PASSWORD" ]; then
+            echo "Error: CM_KEY_PASSWORD is not set"
+            exit 1
+          fi
+          echo "Environment variables are set correctly"
+      
       - name: Setup Android
         script: |
           rm -rf android
@@ -27,12 +40,44 @@ workflows:
           ls -la android
           echo "=== App directory structure ==="
           ls -la android/app
-          echo "=== Checking gradlew ==="
-          if [ -f "android/gradlew" ]; then
-            echo "gradlew found"
-          else
-            echo "gradlew not found!"
-          fi
+      
+      - name: Setup Gradle
+        script: |
+          # Создаем settings.gradle
+          cat > android/settings.gradle << 'EOF'
+          include ':app'
+          include ':capacitor-android'
+          include ':capacitor-cordova-android-plugins'
+          
+          project(':capacitor-android').projectDir = new File('./capacitor/android')
+          project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
+          
+          rootProject.name = "OxygeTV"
+          EOF
+          
+          # Создаем root build.gradle
+          cat > android/build.gradle << 'EOF'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:7.4.2'
+              }
+          }
+          
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          
+          task clean(type: Delete) {
+              delete rootProject.buildDir
+          }
+          EOF
       
       - name: Generate keystore
         script: |
@@ -61,48 +106,26 @@ workflows:
       
       - name: Build Android
         script: |
-          echo "=== Android project structure ==="
+          echo "=== Android project structure before build ==="
           ls -R android/
-          
-          echo "=== Creating root build.gradle ==="
-          cat > android/build.gradle << 'EOF'
-          buildscript {
-              ext {
-                  minSdkVersion = 21
-                  compileSdkVersion = 33
-                  targetSdkVersion = 33
-              }
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:7.4.2'
-              }
-          }
-          
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          EOF
-          
-          echo "=== Checking build.gradle files ==="
-          echo "Root build.gradle:"
-          cat android/build.gradle
-          echo "\nApp build.gradle:"
-          cat android/app/build.gradle
-          echo "\nSettings gradle:"
-          cat android/settings.gradle
           
           cd android
           if [ -f "gradlew" ]; then
             chmod +x gradlew
-            ./gradlew wrapper --gradle-version=7.6
-            ./gradlew clean
-            ./gradlew tasks --all
+            
+            echo "=== Gradle version ==="
+            ./gradlew --version
+            
+            echo "=== Available tasks ==="
+            ./gradlew tasks
+            
+            echo "=== Project evaluation ==="
+            ./gradlew projects
+            
+            echo "=== Dependencies ==="
+            ./gradlew :app:dependencies
+            
+            echo "=== Building release ==="
             ./gradlew assembleRelease --info --stacktrace
           else
             echo "Error: gradlew not found"
