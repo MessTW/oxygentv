@@ -1,8 +1,0 @@
-{
-  "appId": "com.oxygetv.app",
-  "appName": "OxygeTV",
-  "webDir": "dist",
-  "server": {
-    "androidScheme": "https"
-  }
-} 
