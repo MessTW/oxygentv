@@ -13,13 +13,17 @@ workflows:
           npm install @capacitor/core @capacitor/cli @capacitor/android
           npx cap init OxygeTV com.oxygetv.app --web-dir=dist
       
-      - name: Build
-        script: npm run build
+      - name: Build Web
+        script: |
+          npm run build
+          ls -la dist  # Проверяем, что папка dist создана
       
-      - name: Setup Capacitor
+      - name: Setup Android
         script: |
           npx cap add android
           npx cap sync
+          ls -la android  # Проверяем, что папка android создана
+          ls -la android/gradlew  # Проверяем, что gradlew существует
       
       - name: Generate keystore
         script: |
@@ -36,16 +40,26 @@ workflows:
       
       - name: Update Gradle Config
         script: |
-          echo "android.signingConfigs.release.storeFile=../keystore.jks" >> android/app/build.gradle
-          echo "android.signingConfigs.release.storePassword=$CM_KEYSTORE_PASSWORD" >> android/app/build.gradle
-          echo "android.signingConfigs.release.keyAlias=upload" >> android/app/build.gradle
-          echo "android.signingConfigs.release.keyPassword=$CM_KEY_PASSWORD" >> android/app/build.gradle
+          if [ -f "android/app/build.gradle" ]; then
+            echo "android.signingConfigs.release.storeFile=../keystore.jks" >> android/app/build.gradle
+            echo "android.signingConfigs.release.storePassword=$CM_KEYSTORE_PASSWORD" >> android/app/build.gradle
+            echo "android.signingConfigs.release.keyAlias=upload" >> android/app/build.gradle
+            echo "android.signingConfigs.release.keyPassword=$CM_KEY_PASSWORD" >> android/app/build.gradle
+          else
+            echo "Error: build.gradle not found"
+            exit 1
+          fi
       
       - name: Build Android
         script: |
           cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
+            ./gradlew assembleRelease
+          else
+            echo "Error: gradlew not found"
+            exit 1
+          fi
     
     artifacts:
       - android/app/build/outputs/**/*.apk
