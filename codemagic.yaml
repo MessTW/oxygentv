@@ -64,11 +64,46 @@ workflows:
           echo "=== Android project structure ==="
           ls -R android/
           
+          echo "=== Creating root build.gradle ==="
+          cat > android/build.gradle << 'EOF'
+          buildscript {
+              ext {
+                  minSdkVersion = 21
+                  compileSdkVersion = 33
+                  targetSdkVersion = 33
+              }
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:7.4.2'
+              }
+          }
+          
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+          
+          echo "=== Checking build.gradle files ==="
+          echo "Root build.gradle:"
+          cat android/build.gradle
+          echo "\nApp build.gradle:"
+          cat android/app/build.gradle
+          echo "\nSettings gradle:"
+          cat android/settings.gradle
+          
           cd android
           if [ -f "gradlew" ]; then
             chmod +x gradlew
+            ./gradlew wrapper --gradle-version=7.6
+            ./gradlew clean
             ./gradlew tasks --all
-            ./gradlew assembleRelease --stacktrace --info
+            ./gradlew assembleRelease --info --stacktrace
           else
             echo "Error: gradlew not found"
             echo "=== Current directory contents ==="
