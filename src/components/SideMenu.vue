@@ -1,28 +1,13 @@
 <script setup>
 import { computed } from 'vue';
-import { RouterLink, useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useUIStore } from '../stores/ui';
 
-const route = useRoute();
 const uiStore = useUIStore();
 
 const isVisible = computed(() => !uiStore.isPlayerOpen);
 
-const getTitle = computed(() => {
-  switch (route.name) {
-    case 'home':
-      return 'Главная'
-    case 'search':
-      return 'Поиск'
-    case 'favorites':
-      return 'Избранное'
-    case 'movie-details':
-      return 'О фильме'
-    default:
-      return ''
-  }
-});
+
 </script>
 
 <template>

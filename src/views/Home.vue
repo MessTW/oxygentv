@@ -148,16 +148,6 @@ const switchToSlide = (index) => {
   startAutoplay();
 }
 
-const showNextSlide = () => {
-  currentFeaturedIndex.value = (currentFeaturedIndex.value + 1) % featuredMovies.value.length;
-}
-
-const showPrevSlide = () => {
-  currentFeaturedIndex.value = currentFeaturedIndex.value === 0
-    ? featuredMovies.value.length - 1
-    : currentFeaturedIndex.value - 1;
-}
-
 const getBackgroundImage = () => {
   const movie = featuredMovies.value[currentFeaturedIndex.value];
   if (!movie) return '';

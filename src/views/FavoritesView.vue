@@ -1,12 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useFavoritesStore } from '../stores/favorites';
 import { Icon } from '@iconify/vue';
 import LazyImage from '../components/LazyImage.vue';
-
-const API_KEY = 'd341436234a2bb8f0adc73114e093ab2';
-const BASE_URL = 'https://apitmdb.cub.red/3';
 
 const router = useRouter();
 const favoritesStore = useFavoritesStore();
