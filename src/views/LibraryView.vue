@@ -34,7 +34,7 @@ onMounted(() => {
 <template>
   <div class="favorites">
     <section class="favorites-section" v-if="favoritesStore.movies.length > 0">
-      <h2>Избранные фильмы</h2>
+      <h2>Моя бибилиотека</h2>
       <div class="content-grid">
         <div v-for="movie in favoritesStore.movies" :key="movie.id" class="movie-card" @click="showMovieDetails(movie)">
           <LazyImage

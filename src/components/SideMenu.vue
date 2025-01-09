@@ -1,33 +1,18 @@
 <script setup>
 import { computed } from 'vue';
-import { RouterLink, useRoute } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useUIStore } from '../stores/ui';
 
-const route = useRoute();
 const uiStore = useUIStore();
 
 const isVisible = computed(() => !uiStore.isPlayerOpen);
 
-const getTitle = computed(() => {
-  switch (route.name) {
-    case 'home':
-      return 'Главная'
-    case 'search':
-      return 'Поиск'
-    case 'favorites':
-      return 'Избранное'
-    case 'movie-details':
-      return 'О фильме'
-    default:
-      return ''
-  }
-});
+
 </script>
 
 <template>
   <aside class="sidebar" v-show="isVisible">
-    <div class="logo">N</div>
+    <div class="logo"><Icon icon="fluent-mdl2:gradle-logo-32" width="30" height="138" /></div>
     <nav>
       <RouterLink to="/" class="nav-item" title="Главная">
         <Icon icon="material-symbols:home-outline" width="24" />
@@ -35,8 +20,8 @@ const getTitle = computed(() => {
       <RouterLink to="/search" class="nav-item" title="Поиск">
         <Icon icon="iconamoon:search-fill" width="24" />
       </RouterLink>
-      <RouterLink to="/favorites" class="nav-item" title="Избранное">
-        <Icon icon="mdi:heart-outline" width="24" />
+      <RouterLink to="/library" class="nav-item" title="Избранное">
+        <Icon icon="proicons:library" width="24" />
       </RouterLink>
     </nav>
   </aside>
@@ -44,19 +29,16 @@ const getTitle = computed(() => {
 
 <style scoped>
 .sidebar {
-  background-color: var(--surface);
-  position: fixed;
-  left: 0;
-  padding: 1rem 0;
   height: 100vh;
-  transition: width 0.3s ease;
-  z-index: 10;
-  backdrop-filter: blur(10px);
-  border: none;
-  width: 60px;
+  width: var(--side-menu-width);
+  padding: 1rem 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 100;
 }
 
 .logo {
@@ -71,6 +53,7 @@ const getTitle = computed(() => {
   justify-content: center;
   border-radius: 10px;
   background-color: var(--surface-light);
+  flex-shrink: 0;
 }
 
 nav {
@@ -79,7 +62,8 @@ nav {
   gap: 1rem;
   align-items: center;
   width: 100%;
-  margin: auto 0;
+  flex: 1;
+  justify-content: center;
 }
 
 .nav-item {
@@ -89,43 +73,55 @@ nav {
   padding: 12px;
   color: var(--text-secondary);
   text-decoration: none;
-  transition: all 0.2s ease;
   position: relative;
-  overflow: hidden;
   border-radius: 12px;
   margin: 4px;
   width: 44px;
   height: 44px;
 }
 
-.nav-item .iconify {
-  width: 24px;
-  height: 24px;
+.nav-item::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 3px;
+  background-color: var(--accent);
+  transition: width 0.2s ease;
 }
 
-.nav-item:hover {
-  background-color: var(--surface-light);
-  color: var(--text-primary);
-  transform: scale(1.1);
+.nav-item.router-link-active::after {
+  width: 24px;
+}
+
+.nav-item:hover::after {
+  width: 24px;
 }
 
 .nav-item.router-link-active {
-  background-color: var(--surface-light);
   color: var(--accent);
-  font-weight: 500;
 }
 
 @media (max-width: 768px) {
   .sidebar {
     height: var(--mobile-bottom-offset);
-    bottom: 0;
     width: 100%;
-    position: fixed;
     flex-direction: row;
-    justify-content: space-around;
+    justify-content: center;
     padding: 0;
-    background-color: rgba(0, 0, 0, 0.8);
+    background-color: rgb(0, 0, 0);
+    position: fixed;
+    bottom: 0;
+    top: auto;
     left: 0;
+    border-right: none;
+    z-index: 1000;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    background-color: rgba(0, 0, 0, 0.8);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   .logo {
@@ -135,14 +131,41 @@ nav {
   nav {
     flex-direction: row;
     justify-content: space-around;
-    height: 100%;
-    max-width: 300px;
+    width: 100%;
+    max-width: 400px;
     margin: 0 auto;
+    height: 100%;
+    padding: 0 1rem;
   }
 
   .nav-item {
-    padding: 0.5rem;
+    padding: 0.75rem;
     margin: 0;
+    width: 33.33%;
+    height: 56px;
+    color: rgb(255, 255, 255);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .nav-item::after {
+    height: 3px;
+    bottom: 2px;
+  }
+
+  .nav-item.router-link-active::after {
+    width: 24px;
+  }
+
+  .nav-item:hover {
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .nav-item.router-link-active {
+    color: var(--accent);
   }
 }
 </style>

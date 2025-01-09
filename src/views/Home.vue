@@ -134,38 +134,59 @@ const switchToSlide = (index) => {
   }
   resetProgress();
 
-  const backdrop = document.querySelector('.featured-backdrop');
-  backdrop.classList.add('transitioning');
+  // Добавляем класс для анимации
+  const homeElement = document.querySelector('.home');
+  if (homeElement) {
+    homeElement.classList.add('transitioning');
+  }
 
   setTimeout(() => {
     currentFeaturedIndex.value = index;
-    setTimeout(() => {
-      backdrop.classList.remove('transitioning');
-    }, 300);
+    // Обновляем фоновое изображение
+    if (homeElement) {
+      const bgImage = getBackgroundImage();
+      homeElement.style.setProperty('--featured-bg', bgImage);
+      setTimeout(() => {
+        homeElement.classList.remove('transitioning');
+      }, 300);
+    }
   }, 300);
 
   startProgress();
   startAutoplay();
 }
 
-const showNextSlide = () => {
-  currentFeaturedIndex.value = (currentFeaturedIndex.value + 1) % featuredMovies.value.length;
-}
+const handleScroll = () => {
+  // Проверяем, что мы на десктопе
+  if (window.innerWidth <= 768) return;
 
-const showPrevSlide = () => {
-  currentFeaturedIndex.value = currentFeaturedIndex.value === 0
-    ? featuredMovies.value.length - 1
-    : currentFeaturedIndex.value - 1;
-}
+  const scrolled = window.scrollY;
+  const vh = window.innerHeight;
+  const darkness = Math.min(scrolled / vh, 1);
+
+  const homeElement = document.querySelector('.home');
+  if (homeElement) {
+    homeElement.style.setProperty('--scroll-darkness', darkness);
+  }
+};
 
 const getBackgroundImage = () => {
   const movie = featuredMovies.value[currentFeaturedIndex.value];
   if (!movie) return '';
 
-  // Проверяем ширину экрана
   const isMobile = window.innerWidth <= 768;
   const path = isMobile ? movie.poster_path : movie.backdrop_path;
-  return `url(https://imagetmdb.com/t/p/original${path})`;
+  const imageUrl = `url(https://imagetmdb.com/t/p/original${path})`;
+
+  // Обновляем фон страницы только для десктопа
+  if (!isMobile) {
+    const homeElement = document.querySelector('.home');
+    if (homeElement) {
+      homeElement.style.setProperty('--featured-bg', imageUrl);
+    }
+  }
+
+  return imageUrl;
 };
 
 const updateBackgroundImage = () => {
@@ -180,12 +201,21 @@ onMounted(() => {
   fetchGenres()
   startAutoplay()
   window.addEventListener('resize', updateBackgroundImage)
+  window.addEventListener('scroll', handleScroll)
+
+  // Устанавливаем фоновое изображение
+  const homeElement = document.querySelector('.home');
+  if (homeElement && featuredMovies.value[currentFeaturedIndex.value]) {
+    const bgImage = getBackgroundImage();
+    homeElement.style.setProperty('--featured-bg', bgImage);
+  }
 })
 
 onUnmounted(() => {
   stopAutoplay()
   resetProgress()
   window.removeEventListener('resize', updateBackgroundImage)
+  window.removeEventListener('scroll', handleScroll)
 })
 </script>
 
@@ -230,36 +260,40 @@ onUnmounted(() => {
     </section>
 
     <section class="content-section">
-      <h2>Фильмы в тренде</h2>
-      <div class="content-grid">
-        <div v-for="movie in trendingMovies" :key="movie.id"
-          class="content-card"
-          @click="navigateToMovie(movie)">
-          <img :src="`https://imagetmdb.com/t/p/w500${movie.poster_path}`" :alt="movie.title" />
-          <div class="content-overlay">
-            <div class="meta-info">
-              <span class="year">{{ movie.release_date?.split('-')[0] }}</span>
-              <span class="rating">★ {{ movie.vote_average.toFixed(1) }}</span>
+      <div class="content-section-inner">
+        <h2>Фильмы в тренде</h2>
+        <div class="content-grid">
+          <div v-for="movie in trendingMovies" :key="movie.id"
+            class="content-card"
+            @click="navigateToMovie(movie)">
+            <img :src="`https://imagetmdb.com/t/p/w500${movie.poster_path}`" :alt="movie.title" />
+            <div class="content-overlay">
+              <div class="meta-info">
+                <span class="year">{{ movie.release_date?.split('-')[0] }}</span>
+                <span class="rating">★ {{ movie.vote_average.toFixed(1) }}</span>
+              </div>
+              <h3 class="content-title">{{ movie.title }}</h3>
             </div>
-            <h3 class="content-title">{{ movie.title }}</h3>
           </div>
         </div>
       </div>
     </section>
 
     <section class="content-section">
-      <h2>Сериалы в тренде</h2>
-      <div class="content-grid">
-        <div v-for="series in trendingSeries" :key="series.id"
-          class="content-card"
-          @click="navigateToSeries(series)">
-          <img :src="`https://imagetmdb.com/t/p/w500${series.poster_path}`" :alt="series.name" />
-          <div class="content-overlay">
-            <div class="meta-info">
-              <span class="year">{{ series.first_air_date?.split('-')[0] }}</span>
-              <span class="rating">★ {{ series.vote_average.toFixed(1) }}</span>
+      <div class="content-section-inner">
+        <h2>Сериалы в тренде</h2>
+        <div class="content-grid">
+          <div v-for="series in trendingSeries" :key="series.id"
+            class="content-card"
+            @click="navigateToSeries(series)">
+            <img :src="`https://imagetmdb.com/t/p/w500${series.poster_path}`" :alt="series.name" />
+            <div class="content-overlay">
+              <div class="meta-info">
+                <span class="year">{{ series.first_air_date?.split('-')[0] }}</span>
+                <span class="rating">★ {{ series.vote_average.toFixed(1) }}</span>
+              </div>
+              <h3 class="content-title">{{ series.name }}</h3>
             </div>
-            <h3 class="content-title">{{ series.name }}</h3>
           </div>
         </div>
       </div>
@@ -268,114 +302,190 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+
+
+/* Добавляем стили для фонового изображения только для десктопа */
+@media (min-width: 769px) {
+  .home {
+    position: relative;
+    min-height: 100vh;
+    --featured-bg: none;
+    --scroll-darkness: 0;
+  }
+
+  .home::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    background-size: cover;
+    background-position: center;
+    z-index: 1;
+    transition: opacity 0.3s ease, filter 0.3s ease;
+    background-image: var(--featured-bg);
+    filter: brightness(calc(0.5 - var(--scroll-darkness) * 0.5));
+  }
+
+  .hero {
+    position: relative;
+    width: 100vw;
+    height: 90vh;
+    z-index: 1;
+  }
+
+  /* Контент */
+  .content-section {
+    position: relative;
+    z-index: 2;
+    margin-top: -15vh; /* Поднимаем контент выше */
+    background: linear-gradient(transparent 0%, var(--surface) 15%);
+    padding-top: 10vh;
+  }
+
+  .content-section:not(:first-of-type) {
+    margin-top: 0;
+    background: var(--surface);
+  }
+
+  /* Featured информация и слайдер всегда поверх */
+  .featured-info,
+  .slider-dots {
+    position: fixed;
+    z-index: 3;
+  }
+
+  /* Скрываем featured-backdrop на десктопе */
+  .featured-backdrop {
+    display: none;
+  }
+}
+
+/* Возвращаем стандартные стили для мобильных устройств */
+@media (max-width: 768px) {
+  .hero {
+    height: min(100vh, 645px);
+  }
+
+  .content-section {
+    background: var(--surface);
+  }
+}
+
+/* Hero секция */
 .hero {
-  height: 80vh;
   position: relative;
+  margin-left: calc(-1 * var(--side-menu-width));
+  height: 100vh; /* Изменяем на полную высоту */
   overflow: hidden;
 }
 
 .featured-content {
-  position: relative;
   height: 100%;
-  max-width: 1440px;
-  margin: 0 auto;
-}
-
-.featured-info {
-  position: absolute;
-  top: 40%;
-  left: 0;
-  right: 0;
-  padding: 0 var(--mobile-padding);
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  max-width: 50%;
-  margin-left: 5%;
-}
-
-.featured-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.meta-details {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #ffffff;
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
-}
-
-.dot-separator {
-  font-size: 0.5rem;
-}
-
-.featured-info h2 {
-  font-size: 2.5rem;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-  white-space: nowrap;
-  max-width: 100%;
-  line-height: 1.2;
-  margin-bottom: 0.5rem;
+  padding: 0 var(--spacing-large);
+  padding-left: calc(var(--side-menu-width) + var(--spacing-large));
 }
 
 .featured-backdrop {
+  filter: brightness(50%);
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
+  width: 100%;
+  height: 100%;
   background-size: cover;
   background-position: center;
-  transition: opacity 0.3s ease;
   z-index: 1;
-  filter: brightness(0.4);
 }
 
-.featured-backdrop.transitioning {
-  opacity: 0;
+/* Featured информация */
+.featured-info {
+  position: absolute;
+  bottom: var(--spacing-featured-info-bottom);
+  left: calc(var(--side-menu-width) + var(--spacing-featured-info-side));
+  width: min(600px, calc(100% - var(--side-menu-width) - var(--spacing-featured-info-side) * 2));
+  z-index: 101;
 }
 
-.featured-button {
-  padding: 0.8rem 2rem;
-  font-size: 1.1rem;
-  background-color: #e50914;
-  color: white;
-  border: none;
-  border-radius: 4px;
+.featured-info h2 {
+  font-size: var(--font-size-h1);
+  line-height: 1.2;
+  margin-bottom: var(--spacing-base);
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.featured-overview {
+  font-size: var(--font-size-body);
+  line-height: 1.6;
+  margin: var(--spacing-base) 0;
+  height: 4.8em; /* Точно 3 строки */
+  -webkit-line-clamp: 3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Кнопки */
+.video-button {
   cursor: pointer;
+  transition: all 0.2s ease;
+  height: var(--button-height);
+  padding: 0 var(--spacing-large);
+  font-size: var(--font-size-body);
+  min-width: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--button-bg);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  position: relative;
+  z-index: 101;
 }
 
-.featured-button:hover {
-  background-color: #f40612;
+.video-button:hover {
+  background-color: var(--button-hover);
 }
 
+/* Сетка контента */
 .content-section {
-  padding: var(--mobile-padding);
+  padding: var(--spacing-large) 0;
+  width: 100vw;
+  margin-left: calc(-1 * var(--side-menu-width));
+  position: relative;
+  z-index: 1;
+}
+
+.content-section-inner {
+  padding: 0 var(--spacing-large);
+  padding-left: calc(var(--side-menu-width) + var(--spacing-large));
 }
 
 .content-section h2 {
-  margin-bottom: 1.5rem;
-  font-size: 1.8rem;
+  font-size: var(--font-size-h2);
+  margin-bottom: var(--spacing-large);
 }
 
 .content-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 2rem;
+  gap: var(--spacing-base);
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  width: 100%;
 }
 
+/* Карточки */
 .content-card {
   position: relative;
   cursor: pointer;
   border-radius: 8px;
   overflow: hidden;
-  border: 3px solid transparent;
+  border: 2px solid transparent;
   transition: border-color 0.2s ease;
+  width: 100%;
+  aspect-ratio: 2/3;
 }
 
 .content-card:hover {
@@ -384,9 +494,10 @@ onUnmounted(() => {
 
 .content-card img {
   width: 100%;
-  aspect-ratio: 2/3;
+  height: 100%;
   object-fit: cover;
   display: block;
+  transition: filter 0.2s ease;
 }
 
 .content-card:hover img {
@@ -407,29 +518,127 @@ onUnmounted(() => {
 
 .meta-info {
   background: linear-gradient(rgba(0, 0, 0, 0.6), transparent);
-  padding: 1rem;
+  padding: var(--spacing-base);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.9rem;
+  font-size: clamp(14px, 1vw, 16px);
+}
+
+.content-title {
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  padding: var(--spacing-base);
+  margin: 0;
+  color: white;
+  font-size: clamp(16px, 1.2vw, 18px);
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .rating, .year {
   color: white;
+  font-size: clamp(14px, 1vw, 16px);
+}
+
+/* Медиа-запросы для адаптации размеров текста */
+@media (max-width: 1200px) {
+  .content-title {
+    font-size: clamp(15px, 1.1vw, 17px);
+    padding: calc(var(--spacing-base) * 0.75);
+  }
+
+  .meta-info, .rating, .year {
+    font-size: clamp(13px, 0.9vw, 15px);
+    padding: calc(var(--spacing-base) * 0.75);
+  }
 }
 
 @media (max-width: 768px) {
+  .content-title {
+    font-size: clamp(14px, 3.5vw, 16px);
+    padding: calc(var(--spacing-base) * 0.5);
+  }
+
+  .meta-info, .rating, .year {
+    font-size: clamp(12px, 3vw, 14px);
+    padding: calc(var(--spacing-base) * 0.5);
+  }
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
   .hero {
-    height: 60vh;
+    width: 100%;
+    margin-left: 0;
+    height: min(100vh, 645px);
+    overflow: hidden;
+  }
+
+  .featured-backdrop {
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    transform: none;
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-color: var(--surface);
+  }
+
+  .featured-content {
+    padding: 0 var(--spacing-base);
+  }
+
+  .featured-info {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - var(--spacing-base) * 2);
+    text-align: center;
+    bottom: var(--spacing-featured-info-mobile);
+  }
+
+  .featured-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .meta-details {
+    justify-content: center;
+  }
+
+  .featured-overview {
+    display: none;
+  }
+
+  .actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+  }
+
+  .video-button {
+    min-width: 180px;
+  }
+
+  .slider-dots {
+    left: 0;
+    width: 100%;
   }
 
   .content-section {
-    padding: 1rem var(--mobile-padding);
+    width: 100vw;
+    margin-left: 0;
+    padding: var(--spacing-base);
   }
 
-  .content-section h2 {
-    font-size: 1.2rem;
-    margin-bottom: 1rem;
+  .content-section-inner {
+    padding: 0;
   }
 
   .content-grid {
@@ -437,263 +646,56 @@ onUnmounted(() => {
     gap: 0.75rem;
   }
 
-  .content-card {
-    border-radius: 6px;
-    border-width: 2px;
-  }
-
-  .content-overlay {
-    font-size: 0.8rem;
-  }
-
-  .meta-info {
-    padding: 0.5rem;
-    font-size: 0.75rem;
-  }
-
-  .content-title {
-    padding: 0.5rem;
-    font-size: 0.8rem;
-  }
-
-  .featured-backdrop {
-    background-position: top center;
-    background-repeat: no-repeat;
-    background-color: #000;
-    height: 100%;
-  }
-
-  .featured-info {
-    position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    padding: 2rem var(--mobile-padding);
-    max-width: 100%;
-    transform: translateY(-5%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .featured-meta {
-    width: 100%;
-    align-items: center;
-    position: relative;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    max-width: 100%;
-  }
-
-  .featured-info h2 {
-    font-size: 1.25rem;
-    text-align: center;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
-    width: 100%;
-    white-space: normal;
-    padding: 0 1rem;
-    margin-bottom: 0.25rem;
-  }
-
-  .meta-details {
-    font-size: 0.8rem;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-    justify-content: center;
-    width: 100%;
-    display: flex;
-  }
-
-  .actions {
-    position: static;
-    margin-top: 1.5rem;
-  }
-
-  .video-button {
-    font-size: 0.9rem;
-    padding: 10px 20px;
-    min-width: 160px;
-    background: rgba(255, 255, 255, 0.1);
-    margin: 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .slider-dots {
-    position: fixed;
-    bottom: 0;
-    background: none;
-    z-index: 3;
-    padding: 10px 0;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-  }
-
-  .dot {
-    background: rgba(255, 255, 255, 0.2);
-    width: 24px;
-    height: 4px;
-    margin: 0 4px;
-  }
-
-  .dot.active {
-    background: rgba(255, 255, 255, 0.4);
+  .content-section h2 {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
   }
 }
 
-.home {
-  padding: 0;
+@media (min-width: 769px) and (max-width: 1024px) {
+  .content-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
 }
 
-.content-title {
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
-  padding: 1rem;
-  margin: 0;
-  color: white;
-  font-size: 0.9rem;
+@media (min-width: 1025px) and (max-width: 1440px) {
+  .content-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+  }
 }
 
-.poster-buttons {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 2rem;
-  position: relative;
-  z-index: 2;
+@media (min-width: 1441px) {
+  .content-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2rem;
+  }
 }
 
-.video-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 12px 24px;
-  background: var(--button-bg);
-  border: none;
-  border-radius: 8px;
-  color: white;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: 160px;
-  position: relative;
-  z-index: 3;
-}
-
-.video-button:hover {
-  background: var(--button-hover);
-  transform: translateY(-1px);
-}
-
-.header-ratings {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 2rem;
-  z-index: 2;
-  position: relative;
-}
-
-.rating-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.rating-value {
-  font-size: 1.2rem;
-  font-weight: 600;
-}
-
-.rating-icon {
-  font-size: 24px;
-  color: #f5c518;
-}
-
-.year, .genre {
-  color: #ffffff;
-  font-size: 1rem;
-}
-
-.genre {
-  padding: 0.2rem 0.5rem;
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-}
-
-.content-card {
-  transition: opacity 0.3s ease;
-}
-
-.info-footer {
-  margin-top: 2rem;
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-}
-
-.meta-details {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.slider-nav {
-  position: absolute;
-  top: 50%;
-  background: rgba(0, 0, 0, 0.5);
-  border: none;
-  border-radius: 50%;
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  cursor: pointer;
-  z-index: 3;
-  transition: all 0.2s ease;
-}
-
-.slider-nav:hover {
-  background: rgba(0, 0, 0, 0.8);
-}
-
-.slider-nav.prev {
-  left: 20px;
-}
-
-.slider-nav.next {
-  right: 20px;
-}
-
+/* Слайдер */
 .slider-dots {
   position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
-  z-index: 3;
-  padding: 20px;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.5));
+  bottom: var(--spacing-base);
+  left: 0;
   width: 100%;
+  display: flex;
   justify-content: center;
+  gap: 8px;
+  padding: var(--spacing-base);
+  z-index: 101;
 }
 
 .dot {
   width: 24px;
   height: 4px;
-  border-radius: 2px;
   background: rgba(255, 255, 255, 0.3);
   border: none;
+  border-radius: 2px;
   cursor: pointer;
-  transition: all 0.2s ease;
   position: relative;
   overflow: hidden;
-  margin-bottom: 10px;
+  transition: background-color 0.3s ease;
 }
 
 .dot.active {
@@ -704,12 +706,20 @@ onUnmounted(() => {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
   height: 100%;
+  width: 100%;
   background: white;
-  transform: scaleX(0);
   transform-origin: left;
   transition: transform 0.1s linear;
+}
+
+/* Анимации для featured контента */
+.featured-backdrop {
+  transition: opacity 0.3s ease;
+}
+
+.featured-backdrop.transitioning {
+  opacity: 0;
 }
 
 .featured-info {
@@ -720,136 +730,48 @@ onUnmounted(() => {
   opacity: 0;
 }
 
-.actions {
-  width: 100%;
-  display: flex;
-  justify-content: flex-start;
-  margin-top: 1rem;
+.home.transitioning .featured-info {
+  opacity: 0;
 }
 
-.video-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 12px 24px;
-  background: var(--button-bg);
-  border: none;
-  border-radius: 8px;
-  color: white;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: 160px;
-}
-
-.video-button:hover {
-  background: var(--button-hover);
-  transform: translateY(-1px);
-}
-
-@media (max-width: 768px) {
-  .featured-info h2 {
-    font-size: 1.25rem;
-  }
-
-  .meta-details {
-    font-size: 0.8rem;
-  }
-
-  .video-button {
-    font-size: 0.9rem;
-    padding: 10px 20px;
-    min-width: 140px;
-  }
-}
-
-.featured-overview {
-  max-width: 600px;
-  margin-top: 1rem;
-  font-size: 1rem;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.8);
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-  display: none; /* Скрыто по умолчанию для мобильных */
-  max-height: 120px; /* Ограничиваем высоту */
-  overflow: hidden; /* Скрываем излишки */
-  display: -webkit-box;
-  -webkit-line-clamp: 4; /* Показываем максимум 4 строки */
-  -webkit-box-orient: vertical;
-  margin-bottom: 1rem; /* Отступ до кнопки */
-}
-
+/* Hero секция */
 @media (min-width: 769px) {
-  .featured-overview {
-    display: -webkit-box;
-  }
-
-  .featured-info {
-    position: absolute;
-    bottom: 20%;
-    left: 5%;
-    max-width: none;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .featured-meta {
-    margin-bottom: 0;
-    width: 100%;
-    max-width: none;
-  }
-
-  .actions {
-    margin-top: 0;
-  }
-
-  .video-button {
-    margin-top: 1rem;
-  }
-
-  .featured-info h2 {
-    white-space: nowrap;
-    overflow: visible;
-    line-height: 1.2;
-  }
-}
-
-@media (max-width: 768px) {
   .hero {
-    height: 60vh;
+    position: relative; /* Фиксируем секцию */
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
   }
 
-  .featured-backdrop {
-    background-position: top center;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-color: #000;
-    height: 100%;
+  /* Добавляем отступ для контента, чтобы он начинался после hero секции */
+  .content-section:first-of-type {
+    margin-top: 100vh;
   }
 
   .featured-info {
-    position: absolute;
-    top: 75%;
+    position: fixed;
+    bottom: var(--spacing-featured-info-bottom);
+    left: calc(var(--side-menu-width) + var(--spacing-featured-info-side));
+    width: min(600px, calc(100% - var(--side-menu-width) - var(--spacing-featured-info-side) * 2));
+    z-index: 2;
+    opacity: calc(1 - (var(--scroll-darkness) * 5));
+  }
+
+  .slider-dots {
+    position: fixed; /* Фиксируем точки слайдера */
+    bottom: var(--spacing-base);
     left: 0;
-    right: 0;
-    transform: translateY(-50%);
-    padding: 2rem var(--mobile-padding);
-    max-width: 100%;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    width: 100%;
+    z-index: 2;
+    opacity: calc(1 - var(--scroll-darkness));
   }
 
-  .featured-overview {
-    display: none; /* Скрываем на мобильных устройствах */
+  /* Контент поверх фона */
+  .content-section {
+    position: relative;
+    z-index: 3;
   }
-
-  /* ... остальные мобильные стили ... */
 }
-
 </style>

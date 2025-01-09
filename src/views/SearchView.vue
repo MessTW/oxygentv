@@ -1,6 +1,6 @@
 <script setup>
-import { onMounted, computed, ref, watch } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { onMounted, computed, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { useFavoritesStore } from '../stores/favorites';
 import { useContentStore } from '../stores/content';
 import { useUIStore } from '../stores/ui';

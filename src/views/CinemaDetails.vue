@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useContentStore } from '../stores/content';
 import VideoPlayer from '../components/VideoPlayer.vue';
@@ -15,8 +15,8 @@ const content = ref(null);
 const loading = ref(true);
 const contentStore = useContentStore();
 
-const isMovie = computed(() => route.name === 'movie-details');
-const contentType = computed(() => isMovie.value ? 'movie' : 'tv');
+const isMovie = computed(() => route.name === 'movie');
+const contentType = computed(() => isMovie.value ? 'movie' : 'series');
 
 const getSeasonText = (count) => {
   if (count === 1) return 'сезон';
@@ -71,13 +71,14 @@ const getMovieQuality = (id) => {
 
 const fetchDetails = async () => {
   try {
+    const type = route.name === 'movie' ? 'movie' : 'tv';
     const detailsResponse = await fetch(
-      `${BASE_URL}/${contentType.value}/${route.params.id}?api_key=${API_KEY}&language=ru-RU&append_to_response=credits,videos`
+      `${BASE_URL}/${type}/${route.params.id}?api_key=${API_KEY}&language=ru-RU&append_to_response=credits,videos`
     );
     const details = await detailsResponse.json();
 
     const imagesResponse = await fetch(
-      `${BASE_URL}/${contentType.value}/${route.params.id}/images?api_key=${API_KEY}`
+      `${BASE_URL}/${type}/${route.params.id}/images?api_key=${API_KEY}`
     );
     const imagesData = await imagesResponse.json();
 
@@ -143,123 +144,141 @@ const getCurrentUrl = () => window.location.href;
 onMounted(() => {
   fetchDetails();
 });
+
+watch(() => content.value, (newData) => {
+  if (newData?.title || newData?.name) {
+    document.title = `${newData.title || newData.name}`
+  }
+})
 </script>
 
 <template>
-  <div class="cinema-details">
-    <div class="backdrop" :style="content?.backdrop_path ? {
-      backgroundImage: `url(https://imagetmdb.com/t/p/original${content.backdrop_path})`
-    } : { backgroundColor: '#000' }">
-    </div>
-    <div v-if="loading" class="loading">
-      <div class="loader"></div>
-    </div>
-    <div v-else-if="content">
-      <div class="content">
-        <div v-if="content.blocked" class="blocked-notice">
-          <div class="blocked-content">
-            <Icon icon="mdi:lock" class="lock-icon" width="48" />
-            <h1>{{ content.title }}</h1>
-            <p>{{ content.overview }}</p>
-            <button class="home-button" @click="$router.push('/')">
-              <Icon icon="mdi:home" width="24" />
-              <span>На главную</span>
-            </button>
-          </div>
-        </div>
-        <div v-else class="content-wrapper">
-          <div class="title-container">
-            <img
-              v-if="content.logo_path"
-              :src="`https://imagetmdb.com/t/p/w500${content.logo_path}`"
-              :alt="content.title"
-              class="movie-logo"
-            >
-            <h1 v-else class="details-title">{{ content.title }}</h1>
-          </div>
-          <div class="left-column">
-            <div class="meta-line">
-              <span class="quality">
-                {{ getQualityText(content.release_quality || getMovieQuality(route.params.id)) }}
-              </span>
-              <span class="rating">{{ content.vote_average?.toFixed(1) || 'N/A' }}</span>
-              <span class="dot-separator">•</span>
-              <span v-if="content.release_date">
-                {{ new Date(content.release_date).getFullYear() }}
-              </span>
-              <span class="dot-separator">•</span>
-              <div class="country-item" v-if="content.production_countries?.[0]">
-                <Icon
-                  :icon="`flagpack:${content.production_countries[0].iso_3166_1.toLowerCase()}`"
-                  class="flag-icon"
-                />
-              </div>
-              <span class="dot-separator">•</span>
-              <span class="genres" v-if="content.genres?.length">
-                {{ content.genres?.map(genre => genre.name).join(', ') }}
-              </span>
-              <span class="dot-separator">•</span>
-              <span v-if="!isMovie && content.number_of_seasons">
-                {{ content.number_of_seasons }} {{ getSeasonText(content.number_of_seasons) }}
-              </span>
-              <span v-if="content.runtime || content.episode_run_time?.[0]">
-                {{ content.runtime || content.episode_run_time[0] }} мин
-              </span>
-            </div>
-            <p class="overview" v-if="content.overview">{{ content.overview }}</p>
-            <div class="buttons-group">
-              <VideoPlayer
-                :id="content.id.toString()"
-                :type="contentType"
-                :title="content.title"
-                class="watch-button"
-              />
-              <div class="secondary-buttons">
-                <FavoriteButton
-                  :item="content"
-                  :type="contentType"
-                />
-                <ShareButton
-                  :url="getCurrentUrl()"
-                />
-              </div>
+  <div class="page-wrapper">
+    <div class="cinema-details">
+      <div class="backdrop" :style="content?.backdrop_path ? {
+        backgroundImage: `url(https://imagetmdb.com/t/p/original${content.backdrop_path})`
+      } : { backgroundColor: '#000' }">
+      </div>
+      <div v-if="loading" class="loading">
+        <div class="loader"></div>
+      </div>
+      <div v-else-if="content">
+        <div class="content">
+          <div v-if="content.blocked" class="blocked-notice">
+            <div class="blocked-content">
+              <Icon icon="mdi:lock" class="lock-icon" width="48" />
+              <h1>{{ content.title }}</h1>
+              <p>{{ content.overview }}</p>
+              <button class="home-button" @click="$router.push('/')">
+                <Icon icon="mdi:home" width="24" />
+                <span>На главную</span>
+              </button>
             </div>
           </div>
+          <div v-else class="content-wrapper">
+            <div class="title-container">
+              <img
+                v-if="content.logo_path"
+                :src="`https://imagetmdb.com/t/p/w500${content.logo_path}`"
+                :alt="content.title"
+                class="movie-logo"
+              >
+              <h1 v-else class="details-title">{{ content.title }}</h1>
+            </div>
+            <div class="left-column">
+              <div class="meta-line">
+                <span class="quality">
+                  {{ getQualityText(content.release_quality || getMovieQuality(route.params.id)) }}
+                </span>
+                <span class="rating">{{ content.vote_average?.toFixed(1) || 'N/A' }}</span>
+                <span class="dot-separator">•</span>
+                <span v-if="content.release_date">
+                  {{ new Date(content.release_date).getFullYear() }}
+                </span>
+                <span class="dot-separator">•</span>
+                <div class="country-item" v-if="content.production_countries?.[0]">
+                  <Icon
+                    :icon="`flagpack:${content.production_countries[0].iso_3166_1.toLowerCase()}`"
+                    class="flag-icon"
+                  />
+                </div>
+                <span class="dot-separator">•</span>
+                <span class="genres" v-if="content.genres?.length">
+                  {{ content.genres?.map(genre => genre.name).join(', ') }}
+                </span>
+                <span class="dot-separator">•</span>
+                <span v-if="!isMovie && content.number_of_seasons">
+                  {{ content.number_of_seasons }} {{ getSeasonText(content.number_of_seasons) }}
+                </span>
+                <span v-if="content.runtime || content.episode_run_time?.[0]">
+                  {{ content.runtime || content.episode_run_time[0] }} мин
+                </span>
+              </div>
+              <p class="overview" v-if="content.overview">{{ content.overview }}</p>
+              <div class="buttons-group">
+                <div class="primary-buttons">
+                  <VideoPlayer
+                    :id="content.id.toString()"
+                    :type="contentType"
+                    :title="content.title"
+                    class="watch-button"
+                  />
+                  <button
+                    class="torrent-button"
+                    @click="$router.push(`/${contentType}/${content.id}/torrent`)"
+                  >
+                    <Icon icon="mdi:download" width="24" />
+                    Торренты
+                  </button>
+                  <div class="secondary-buttons">
+                  <FavoriteButton
+                    :item="content"
+                    :type="contentType"
+                  />
+                  <ShareButton
+                    :url="getCurrentUrl()"
+                  />
+                </div>
+                </div>
 
-          <div class="right-column">
-            <div class="credits">
-              <div class="credit-section" v-if="isMovie && content.credits?.crew">
-                <h3>Режиссеры:</h3>
-                <div class="persons-list">
-                  <div v-for="director in content.credits?.crew?.filter(person => person.job === 'Director')"
-                       :key="director.id"
-                       class="person-card">
-                    <img
-                      :src="director.profile_path ? `https://imagetmdb.com/t/p/w185${director.profile_path}` : 'https://via.placeholder.com/185x278/1a1a1a/5f5f5f?text=No+Photo'"
-                      :alt="director.name"
-                      class="person-photo"
-                    >
-                    <div class="person-info">
-                      <span class="person-name">{{ director.name }}</span>
-                      <span class="person-role">Режиссер</span>
+              </div>
+            </div>
+
+            <div class="right-column">
+              <div class="credits">
+                <div class="credit-section" v-if="isMovie && content.credits?.crew">
+                  <h3>Режиссеры:</h3>
+                  <div class="persons-list">
+                    <div v-for="director in content.credits?.crew?.filter(person => person.job === 'Director')"
+                         :key="director.id"
+                         class="person-card">
+                      <img
+                        :src="director.profile_path ? `https://imagetmdb.com/t/p/w185${director.profile_path}` : 'https://via.placeholder.com/185x278/1a1a1a/5f5f5f?text=No+Photo'"
+                        :alt="director.name"
+                        class="person-photo"
+                      >
+                      <div class="person-info">
+                        <span class="person-name">{{ director.name }}</span>
+                        <span class="person-role">Режиссер</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div class="credit-section">
-                <h3>В ролях:</h3>
-                <div class="persons-list">
-                  <div v-for="actor in content.credits?.cast?.slice(0, 6)"
-                       :key="actor.id"
-                       class="person-card">
-                    <img
-                      :src="actor.profile_path ? `https://imagetmdb.com/t/p/w185${actor.profile_path}` : 'https://via.placeholder.com/185x278/1a1a1a/5f5f5f?text=No+Photo'"
-                      :alt="actor.name"
-                      class="person-photo"
-                    >
-                    <div class="person-info">
-                      <span class="person-name">{{ actor.name }}</span>
-                      <span class="person-role">{{ actor.character }}</span>
+                <div class="credit-section">
+                  <h3>В ролях:</h3>
+                  <div class="persons-list">
+                    <div v-for="actor in content.credits?.cast?.slice(0, 6)"
+                         :key="actor.id"
+                         class="person-card">
+                      <img
+                        :src="actor.profile_path ? `https://imagetmdb.com/t/p/w185${actor.profile_path}` : 'https://via.placeholder.com/185x278/1a1a1a/5f5f5f?text=No+Photo'"
+                        :alt="actor.name"
+                        class="person-photo"
+                      >
+                      <div class="person-info">
+                        <span class="person-name">{{ actor.name }}</span>
+                        <span class="person-role">{{ actor.character }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -273,6 +292,10 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.page-wrapper {
+  min-height: 100vh;
+}
+
 .cinema-details {
   min-height: 100vh;
   position: relative;
@@ -597,6 +620,14 @@ onMounted(() => {
     max-width: 280px;
     margin: 0 auto 1.5rem;
   }
+
+  .primary-buttons {
+    flex-direction: column;
+  }
+
+  .torrent-button {
+    width: 100%;
+  }
 }
 
 @media (max-width: 360px) {
@@ -709,5 +740,42 @@ onMounted(() => {
   width: 100%;
   height: auto;
   filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.primary-buttons {
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+}
+
+.torrent-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 12px 24px;
+  background: var(--button-bg);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 140px;
+}
+
+.torrent-button:hover {
+  background: var(--button-hover);
+}
+
+@media (max-width: 768px) {
+  .primary-buttons {
+    flex-direction: column;
+  }
+
+  .torrent-button {
+    width: 100%;
+  }
 }
 </style>

@@ -1,8 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Home from '../views/Home.vue'
-import Search from '../views/Search.vue'
+import HomeView from '../views/HomeView.vue'
+import SearchView from '../views/SearchView.vue'
 import CinemaDetails from '../views/CinemaDetails.vue'
-import FavoritesView from '../views/FavoritesView.vue'
+import LibraryView from '../views/LibraryView.vue'
+import TorrentPage from '../views/TorrentPage.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -10,29 +11,65 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: Home
+      component: HomeView,
+      meta: {
+        title: 'Главная | oxyge tv'
+      }
     },
     {
       path: '/search',
       name: 'search',
-      component: Search
+      component: SearchView,
+      meta: {
+        title: 'Поиск | oxyge tv'
+      }
     },
     {
       path: '/movie/:id',
-      name: 'movie-details',
-      component: CinemaDetails
+      name: 'movie',
+      component: CinemaDetails,
+      meta: {
+        title: 'Загрузка...'
+      }
     },
     {
       path: '/series/:id',
-      name: 'series-details',
-      component: CinemaDetails
+      name: 'series',
+      component: CinemaDetails,
+      meta: {
+        title: 'Загрузка...'
+      }
     },
     {
-      path: '/favorites',
-      name: 'favorites',
-      component: FavoritesView
+      path: '/library',
+      name: 'library',
+      component: LibraryView,
+      meta: {
+        title: 'Моя бибилиотека | oxyge tv'
+      }
+    },
+    {
+      path: '/movie/:id/torrent',
+      name: 'movie-torrents',
+      component: TorrentPage,
+      meta: {
+        title: 'Загрузка...'
+      }
+    },
+    {
+      path: '/series/:id/torrent',
+      name: 'series-torrents',
+      component: TorrentPage,
+      meta: {
+        title: 'Загрузка...'
+      }
     }
   ]
+})
+
+router.beforeEach((to, from, next) => {
+  document.title = `${to.meta.title}`
+  next()
 })
 
 export default router
