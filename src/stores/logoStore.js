@@ -2,46 +2,34 @@ import { defineStore } from 'pinia'
 
 export const useLogoStore = defineStore('logo', {
   state: () => ({
-    logos: {},
-    isLoading: false,
-    loadingPromises: new Map()
+    logos: {}
   }),
 
   actions: {
-    async fetchLogo(movieId, baseUrl, apiKey) {
-      if (this.logos[movieId]) {
-        return this.logos[movieId]
-      }
+    async fetchLogo(id, baseUrl, apiKey, type = 'movie') {
+      try {
+        const response = await fetch(
+          `${baseUrl}/${type}/${id}/images?api_key=${apiKey}`
+        )
+        const data = await response.json()
 
-      if (this.loadingPromises.has(movieId)) {
-        return this.loadingPromises.get(movieId)
-      }
-
-      const promise = (async () => {
-        try {
-          const response = await fetch(
-            `${baseUrl}/movie/${movieId}/images?api_key=${apiKey}`
-          )
-          const data = await response.json()
-          const logo = data.logos?.find(logo => logo.iso_639_1 === 'ru') ||
-                      data.logos?.find(logo => logo.iso_639_1 === 'en') ||
-                      data.logos?.[0]
+        if (data.logos && data.logos.length > 0) {
+          // Ищем русский или английский логотип
+          const logo = data.logos.find(l => l.iso_639_1 === 'ru') ||
+                      data.logos.find(l => l.iso_639_1 === 'en') ||
+                      data.logos[0]
 
           if (logo) {
             const logoUrl = `https://imagetmdb.com/t/p/w500${logo.file_path}`
-            this.logos[movieId] = logoUrl
+            this.logos[id] = logoUrl
             return logoUrl
           }
-        } catch (error) {
-          console.error('Error fetching movie logo:', error)
-        } finally {
-          this.loadingPromises.delete(movieId)
         }
         return null
-      })()
-
-      this.loadingPromises.set(movieId, promise)
-      return promise
+      } catch (error) {
+        console.error('Error fetching logo:', error)
+        return null
+      }
     },
 
     async prefetchLogos(movies, baseUrl, apiKey) {

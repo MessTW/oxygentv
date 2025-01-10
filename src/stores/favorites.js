@@ -29,8 +29,9 @@ export const useFavoritesStore = defineStore('favorites', {
       localStorage.setItem('favoriteSeries', JSON.stringify(this.series))
     },
 
-    isMovieFavorite(movieId) {
-      return this.movies.some(movie => movie.id === movieId)
+    isMovieFavorite(movie) {
+      const movieId = typeof movie === 'object' ? movie.id : movie;
+      return this.movies.some(m => m.id === movieId);
     },
 
     isSeriesFavorite(seriesId) {
@@ -45,4 +46,4 @@ export const useFavoritesStore = defineStore('favorites', {
       if (series) this.series = JSON.parse(series)
     }
   }
-}) 
+})

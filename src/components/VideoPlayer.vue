@@ -1,12 +1,20 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import { useUIStore } from '../stores/ui';
 
+const router = useRouter();
 const props = defineProps({
-  id: {
+  tmdbId: {
     type: String,
     required: true
+  },
+  imdbId: {
+    type: String,
+    default: ''
+  },
+  year: {
+    type: [String, Number],
+    default: ''
   },
   type: {
     type: String,
@@ -22,46 +30,25 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['player-opened', 'player-closed']);
-const isPlayerOpen = ref(false);
-const playerContainer = ref(null);
-
-const uiStore = useUIStore();
-
-onMounted(() => {
-  const script = document.createElement('script');
-  script.src = 'https://fridayprivate.vercel.app/assets/js/kinobox.min.js';
-  document.head.appendChild(script);
-});
-
-const initPlayer = () => {
-  if (window.kbox && playerContainer.value) {
-    window.kbox(playerContainer.value, {
-      search: {
-        tmdb: props.id,
-        query: props.title
-      },
-      players: {
-        alloha: true,
-      },
-      menu: {
-        enable: false,
-      },
-    });
-  }
-};
-
 const openPlayer = () => {
-  isPlayerOpen.value = true;
-  uiStore.setPlayerOpen(true);
-  emit('player-opened');
-  setTimeout(initPlayer, 100);
-};
+  // Устанавливаем заголовок страницы
+  document.title = `${props.title} - Смотреть онлайн`;
 
-const closePlayer = () => {
-  isPlayerOpen.value = false;
-  uiStore.setPlayerOpen(false);
-  emit('player-closed');
+  // Сохраняем данные в localStorage
+  localStorage.setItem('playerData', JSON.stringify({
+    title: props.title,
+    type: props.type,
+    id: props.tmdbId,
+    year: props.year,
+    imdb: props.imdbId
+  }));
+
+  router.push({
+    name: 'watch',
+    params: {
+      title: props.title.toLowerCase().replace(/[^a-zа-яё0-9\s]/gi, '').replace(/\s+/g, '-')
+    }
+  });
 };
 </script>
 
@@ -74,22 +61,6 @@ const closePlayer = () => {
     <Icon icon="material-symbols:play-arrow" width="24" />
     <span>Смотреть</span>
   </button>
-
-  <div v-if="isPlayerOpen" class="mui-modal">
-    <div class="mui-modal-content">
-      <div class="mui-app-bar">
-        <h3 class="mui-typography">{{ title }}</h3>
-        <button class="mui-icon-button" @click="closePlayer">
-          <span class="mui-icon">×</span>
-        </button>
-      </div>
-      <div class="mui-player-container">
-        <div ref="playerContainer" class="player-container">
-          <div class="touch-overlay"></div>
-        </div>
-      </div>
-    </div>
-  </div>
 </template>
 
 <style scoped>
@@ -123,7 +94,6 @@ const closePlayer = () => {
   justify-content: center;
   background-color: rgb(0, 0, 0);
   z-index: 1000;
-  -webkit-tap-highlight-color: transparent;
 }
 
 .mui-modal-content {
@@ -143,150 +113,46 @@ const closePlayer = () => {
   padding: 0 16px;
   background-color: #1a1a1a;
   color: #fff;
-  box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2),
-             0px 4px 5px 0px rgba(0,0,0,0.14),
-             0px 1px 10px 0px rgba(0,0,0,0.12);
-  border-bottom: 1px solid var(--border);
+  z-index: 100;
 }
 
 .mui-typography {
   margin: 0;
-  font-family: "Roboto", "Helvetica", "Arial", sans-serif;
-  font-size: 1rem;
-  line-height: 1.5;
-  letter-spacing: 0.00938em;
-  font-weight: 400;
+  font-size: 1.2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .mui-icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  position: relative;
   padding: 12px;
   border-radius: 50%;
   border: 0;
   color: #fff;
   background-color: transparent;
   cursor: pointer;
-  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
+  transition: background-color 0.2s;
 }
 
 .mui-icon-button:hover {
-  background-color: rgba(255, 255, 255, 0.08);
-}
-
-.mui-icon {
-  font-size: 1.25rem;
-  user-select: none;
-}
-
-.mui-player-container {
-  position: relative;
-  flex: 1;
-  background-color: #000;
-}
-
-.mui-player-container > div {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* Mobile adaptations */
-@media (max-width: 600px) {
-  .mui-app-bar {
-    min-height: 48px;
-    padding: 0 8px;
-  }
-
-  .mui-typography {
-    font-size: 0.875rem;
-  }
-
-  .mui-icon-button {
-    padding: 8px;
-  }
-
-  .mui-button {
-    padding: 4px 10px;
-    font-size: 0.8125rem;
-  }
-}
-
-/* Landscape orientation on mobile */
-@media (max-height: 600px) and (orientation: landscape) {
-  .mui-app-bar {
-    min-height: 40px;
-  }
-
-  .mui-typography {
-    font-size: 0.875rem;
-  }
-}
-
-/* Safe area for notched phones */
-@supports (padding: env(safe-area-inset-top)) {
-  .mui-modal-content {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .player-container {
+  flex: 1;
   position: relative;
-  width: 100%;
-  height: 100%;
+  background: #000;
 }
 
 .touch-overlay {
   position: absolute;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  right: 0;
+  bottom: 0;
   z-index: 1;
-  pointer-events: none;
-}
-
-@media (max-width: 768px) {
-  .mui-app-bar {
-    min-height: 48px;
-  }
-
-  .mui-typography {
-    font-size: 0.875rem;
-  }
-
-  .mui-icon-button {
-    min-width: 44px;
-    min-height: 44px;
-    padding: 8px;
-  }
-
-  .player-container iframe {
-    pointer-events: auto;
-  }
-}
-
-/* Дополнительные стили для кнопки с классом watch-button */
-:global(.watch-button) {
-  background-color: var(--accent);
-}
-
-:global(.watch-button:hover) {
-  background-color: var(--accent-hover);
-}
-
-.video-player {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgb(0, 0, 0);
-  z-index: 1000;
 }
 </style>

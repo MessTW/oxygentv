@@ -1,12 +1,18 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
-import { useUIStore } from '../stores/ui';
+import { checkAdminAccess } from '../services/adminAuth';
 
-const uiStore = useUIStore();
+const isVisible = computed(() => {
+  const isPlayerPage = window.location.pathname.includes('/watch/');
+  return !isPlayerPage;
+});
 
-const isVisible = computed(() => !uiStore.isPlayerOpen);
+const showAdminButton = ref(false);
 
+onMounted(async () => {
+  showAdminButton.value = await checkAdminAccess();
+});
 
 </script>
 
@@ -22,6 +28,14 @@ const isVisible = computed(() => !uiStore.isPlayerOpen);
       </RouterLink>
       <RouterLink to="/library" class="nav-item" title="Избранное">
         <Icon icon="proicons:library" width="24" />
+      </RouterLink>
+      <RouterLink
+        v-if="showAdminButton"
+        to="/admin/login"
+        class="nav-item"
+        title="Админ панель"
+      >
+        <Icon icon="mdi:shield-crown" width="24" />
       </RouterLink>
     </nav>
   </aside>

@@ -32,9 +32,9 @@ const isFavorite = () => {
 </script>
 
 <template>
-  <button 
+  <button
     class="favorite-button"
-    @click="toggleFavorite" 
+    @click="toggleFavorite"
     :class="{ active: isFavorite() }"
     :title="isFavorite() ? 'Удалить из избранного' : 'Добавить в избранное'"
   >
@@ -44,34 +44,30 @@ const isFavorite = () => {
 
 <style scoped>
 .favorite-button {
-  width: 100%;
-  padding: 1rem 2rem;
-  font-size: 1.1rem;
-  background-color: rgba(255, 255, 255, 0.1);
-  transition: background-color 0.2s ease;
-  border-radius: 8px;
-  border: none;
   cursor: pointer;
+  transition: all 0.2s ease;
+  height: var(--button-height);
+  padding: 0 var(--spacing-large);
+  font-size: var(--font-size-body);
+  min-width: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  color: white;
-  min-width: 44px;
-  min-height: 44px;
-}
-
-.favorite-button:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-.favorite-button.active {
-  color: #e50914;
+  border: none;
+  border-radius: 8px;
+  position: relative;
+  z-index: 101;
+  font-weight: 600;
+  background: whitesmoke;
+  color: rgb(0, 0, 0);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease;
 }
 
 @media (max-width: 768px) {
   .favorite-button {
-    padding: 8px;
+    width: 100%;
   }
 }
-</style> 
+</style>

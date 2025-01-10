@@ -87,6 +87,7 @@ onMounted(() => {
   /* Отступы */
   --spacing-base: 1rem;
   --spacing-large: 2rem;
+  --spacing-logo: -0.5rem;
   --spacing-featured-info-bottom: 20rem;
   --spacing-featured-info-side: 2rem;
   --spacing-featured-info-mobile: 5rem;

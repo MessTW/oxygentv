@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useFavoritesStore } from '../stores/favorites';
 import { useContentStore } from '../stores/content';
 import { useUIStore } from '../stores/ui';
+import { useBlockListStore } from '../stores/blockList';
 import { Icon } from '@iconify/vue';
 import LazyImage from '../components/LazyImage.vue';
 
@@ -11,6 +12,7 @@ const router = useRouter();
 const favoritesStore = useFavoritesStore();
 const contentStore = useContentStore();
 const uiStore = useUIStore();
+const blockListStore = useBlockListStore();
 
 const activeTab = ref('movie'); // 'movie' или 'tv'
 
@@ -51,7 +53,13 @@ const getYear = (item) => {
 };
 
 const items = computed(() => {
-  return activeTab.value === 'movie' ? contentStore.movies : contentStore.series;
+  const allItems = activeTab.value === 'movie' ? contentStore.movies : contentStore.series;
+  return allItems.filter(item => {
+    const id = item.id;
+    return activeTab.value === 'movie'
+      ? !blockListStore.isMovieBlocked(id)
+      : !blockListStore.isSeriesBlocked(id);
+  });
 });
 
 const selectedGenre = computed(() => {

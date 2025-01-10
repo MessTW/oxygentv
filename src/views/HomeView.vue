@@ -4,25 +4,28 @@ import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useLogoStore } from '@/stores/logoStore'
+import { useBlockListStore } from '@/stores/blockList'
+import FavoriteButton from '@/components/FavoriteButton.vue'
 
 const API_KEY = 'd341436234a2bb8f0adc73114e093ab2'
 const BASE_URL = 'https://apitmdb.cub.red/3'
 
-const trendingMovies = ref([])
-const trendingSeries = ref([])
-const featuredMovies = ref([])
 const genres = ref([])
-const currentFeaturedIndex = ref(0)
-const autoplayInterval = ref(null)
-const progressInterval = ref(null)
-const progress = ref(0)
-const isMobile = ref(false)
 const movieLogos = ref({})
+const featuredContent = ref([])
+const featuredItems = ref([])
+const progress = ref(0)
+const progressInterval = ref(null)
+const autoplayInterval = ref(null)
+const currentFeaturedIndex = ref(0)
+const isMobile = ref(false)
+const movieDetails = ref({})
 
 const router = useRouter()
 
 // Инициализируем store
 const logoStore = useLogoStore()
+const blockListStore = useBlockListStore()
 
 const fetchGenres = async () => {
   try {
@@ -36,11 +39,96 @@ const fetchGenres = async () => {
   }
 }
 
-const fetchMovieLogo = async (movieId) => {
-  const logo = await logoStore.fetchLogo(movieId, BASE_URL, API_KEY)
+const fetchLogo = async (item) => {
+  const logo = await logoStore.fetchLogo(item.id, BASE_URL, API_KEY, item.mediaType)
   if (logo) {
-    movieLogos.value[movieId] = logo
+    movieLogos.value[item.id] = logo
   }
+}
+
+const getAgeRating = (movie) => {
+  if (movie.release_dates?.results) {
+    const ruRating = movie.release_dates.results.find(r => r.iso_3166_1 === 'RU')?.release_dates[0]?.certification
+    const usRating = movie.release_dates.results.find(r => r.iso_3166_1 === 'US')?.release_dates[0]?.certification
+
+    if (ruRating) return ruRating
+
+    if (usRating) {
+      // Кинорейтинги
+      switch (usRating) {
+        case 'G': return '0+'
+        case 'PG': return '6+'
+        case 'PG-13': return '13+'
+        case 'R': return '17+'
+        case 'NC-17': return '18+'
+        // ТВ рейтинги
+        case 'TV-Y': return '0+'
+        case 'TV-Y7': return '7+'
+        case 'TV-G': return '0+'
+        case 'TV-PG': return '6+'
+        case 'TV-14': return '14+'
+        case 'TV-MA': return '17+'
+        // Дополнительные рейтинги
+        case 'NR': // Not Rated
+        case 'UR': // Unrated
+        default: return 'N/A'
+      }
+    }
+  }
+
+  if (movie.adult) return '18+'
+  const rating = movie.vote_average
+  if (rating >= 7.5) return '16+'
+  if (rating >= 6) return '12+'
+  return '6+'
+}
+
+// Функция для форматирования жанров
+const formatGenres = (genres) => {
+  if (!genres?.length) return '';
+
+  // Маппинг для замены жанров
+  const genreMapping = {
+    'боевик и приключения': 'Приключения',
+    'боевик': 'Боевик',
+    'приключения': 'Приключения',
+    'комедия': 'Комедия',
+    'криминал': 'Криминал',
+    'документальный': 'Документальный',
+    'драма': 'Драма',
+    'семейный': 'Семейный',
+    'фэнтези': 'Фэнтези',
+    'история': 'История',
+    'ужасы': 'Ужасы',
+    'детектив': 'Детектив',
+    'музыка': 'Музыка',
+    'мистика': 'Мистика',
+    'мелодрама': 'Мелодрама',
+    'нф и фэнтези': 'Научная фантастика',
+    'телевизионный фильм': 'ТВ фильм',
+    'триллер': 'Триллер',
+    'военный': 'Военный',
+    'вестерн': 'Вестерн',
+    'боевик и триллер': 'Триллер',
+    'анимация': 'Анимация',
+    'детский': 'Детский'
+  };
+
+  return genres
+    .slice(0, 3) // Берем только первые три жанра
+    .map(g => {
+      const genreName = g.name.toLowerCase();
+      return genreMapping[genreName] || g.name.charAt(0).toUpperCase() + g.name.slice(1);
+    })
+    .join(' ')
+    .replace(/ и /g, ' ');
+}
+
+// Добавим функцию для обрезки текста
+const truncateText = (text, maxLength = 80) => {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength).trim() + '...';
 }
 
 const fetchTrending = async () => {
@@ -49,31 +137,75 @@ const fetchTrending = async () => {
       `${BASE_URL}/trending/movie/week?api_key=${API_KEY}&language=ru-RU`,
     )
     const moviesData = await moviesResponse.json()
-    const filteredMovies = moviesData.results.filter(movie =>
-      movie.title &&
-      movie.title.trim() !== '' &&
-      movie.overview &&
-      movie.overview.trim() !== ''
-    );
-
-    trendingMovies.value = filteredMovies;
-    featuredMovies.value = filteredMovies.slice(0, 5);
+    const filteredMovies = moviesData.results
+      .filter(movie =>
+        movie.title &&
+        movie.title.trim() !== '' &&
+        movie.overview &&
+        movie.overview.trim() !== '' &&
+        !blockListStore.isMovieBlocked(movie.id)
+      )
+      .map(movie => ({ ...movie, mediaType: 'movie' }));
 
     const seriesResponse = await fetch(
       `${BASE_URL}/trending/tv/week?api_key=${API_KEY}&language=ru-RU`,
     )
     const seriesData = await seriesResponse.json()
-    const filteredSeries = seriesData.results.filter(show =>
-      show.name &&
-      show.name.trim() !== '' &&
-      show.overview &&
-      show.overview.trim() !== ''
-    );
+    const filteredSeries = seriesData.results
+      .filter(show =>
+        show.name &&
+        show.name.trim() !== '' &&
+        show.overview &&
+        show.overview.trim() !== '' &&
+        !blockListStore.isSeriesBlocked(show.id)
+      )
+      .map(show => ({ ...show, mediaType: 'tv', routeType: 'series' }));
 
-    trendingSeries.value = filteredSeries;
+    // Объединяем фильмы и сериалы для слайдера (берем первые 5)
+    featuredItems.value = [...filteredMovies, ...filteredSeries]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 5);
 
-    for (const movie of featuredMovies.value) {
-      await fetchMovieLogo(movie.id)
+    // Объединяем и перемешиваем все фильмы и сериалы для сетки
+    featuredContent.value = [...filteredMovies, ...filteredSeries]
+      .sort(() => Math.random() - 0.5);
+
+    // Загружаем логотипы для всех элементов (фильмов и сериалов)
+    for (const item of featuredItems.value) {
+      await fetchLogo(item)
+    }
+
+    for (const item of featuredItems.value) {
+      try {
+        const detailsResponse = await fetch(
+          `${BASE_URL}/${item.mediaType}/${item.id}?api_key=${API_KEY}&language=ru-RU&append_to_response=release_dates`
+        )
+        const details = await detailsResponse.json()
+        // Разная обработка для фильмов и сериалов
+        if (item.mediaType === 'tv') {
+          const status = details.status === 'Ended' ? 'Завершен' : 'Выходит';
+
+          movieDetails.value[item.id] = {
+            tagline: truncateText(details.tagline || item.overview.split('.')[0]),
+            rating: getAgeRating(details),
+            genres: formatGenres(details.genres) || '',
+            status: status
+          }
+        } else {
+          movieDetails.value[item.id] = {
+            tagline: truncateText(details.tagline || item.overview.split('.')[0]),
+            rating: getAgeRating(details),
+            genres: formatGenres(details.genres) || ''
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching details:', error)
+        movieDetails.value[item.id] = {
+          tagline: item.overview.split('.')[0] + '.',
+          rating: getAgeRating(item),
+          genres: ''
+        }
+      }
     }
   } catch (error) {
     console.error('Error:', error)
@@ -109,7 +241,7 @@ const startAutoplay = () => {
 
       // Ждем завершения анимации затухания
       setTimeout(() => {
-        currentFeaturedIndex.value = (currentFeaturedIndex.value + 1) % featuredMovies.value.length;
+        currentFeaturedIndex.value = (currentFeaturedIndex.value + 1) % featuredItems.value.length;
 
         // Ждем обновления DOM и запускаем анимацию появления
         nextTick(() => {
@@ -134,17 +266,16 @@ const stopAutoplay = () => {
 }
 
 const handleFeaturedClick = () => {
-  if (featuredMovies.value[currentFeaturedIndex.value]) {
-    router.push(`/movie/${featuredMovies.value[currentFeaturedIndex.value].id}`)
+  if (featuredItems.value[currentFeaturedIndex.value]) {
+    const item = featuredItems.value[currentFeaturedIndex.value];
+    const path = item.mediaType === 'movie' ? 'movie' : item.routeType;
+    router.push(`/${path}/${item.id}`);
   }
 }
 
-const navigateToMovie = (movie) => {
-  router.push(`/movie/${movie.id}`)
-}
-
-const navigateToSeries = (series) => {
-  router.push(`/series/${series.id}`)
+const navigateToContent = (item) => {
+  const path = item.mediaType === 'movie' ? 'movie' : item.routeType;
+  router.push(`/${path}/${item.id}`);
 }
 
 const switchToSlide = (index) => {
@@ -180,8 +311,8 @@ const switchToSlide = (index) => {
 
 // Предзагрузка следующего изображения
 const preloadNextImage = () => {
-  const nextIndex = (currentFeaturedIndex.value + 1) % featuredMovies.value.length;
-  const nextMovie = featuredMovies.value[nextIndex];
+  const nextIndex = (currentFeaturedIndex.value + 1) % featuredItems.value.length;
+  const nextMovie = featuredItems.value[nextIndex];
   if (nextMovie) {
     const isMobile = window.innerWidth <= 768;
     const path = isMobile ? nextMovie.poster_path : nextMovie.backdrop_path;
@@ -205,7 +336,7 @@ const handleScroll = () => {
 };
 
 const getBackgroundImage = () => {
-  const movie = featuredMovies.value[currentFeaturedIndex.value];
+  const movie = featuredItems.value[currentFeaturedIndex.value];
   if (!movie) return '';
 
   const isMobile = window.innerWidth <= 768;
@@ -244,17 +375,21 @@ const getProgressBarStyle = computed(() => {
 
 // Добавляем computed свойство для текущего логотипа
 const currentMovieLogo = computed(() => {
-  const currentMovie = featuredMovies.value[currentFeaturedIndex.value]
+  const currentMovie = featuredItems.value[currentFeaturedIndex.value]
   return currentMovie ? logoStore.logos[currentMovie.id] : null
 })
 
 // Добавляем предзагрузку следующего логотипа при смене слайда
 watch(currentFeaturedIndex, (newIndex) => {
-  const nextIndex = (newIndex + 1) % featuredMovies.value.length
-  const nextMovie = featuredMovies.value[nextIndex]
-  if (nextMovie && !logoStore.logos[nextMovie.id]) {
-    fetchMovieLogo(nextMovie.id)
+  const nextIndex = (newIndex + 1) % featuredItems.value.length
+  const nextItem = featuredItems.value[nextIndex]
+  if (nextItem && !logoStore.logos[nextItem.id]) {
+    fetchLogo(nextItem)
   }
+})
+
+const getCurrentItem = computed(() => {
+  return featuredItems.value[currentFeaturedIndex.value]
 })
 
 onMounted(() => {
@@ -268,7 +403,7 @@ onMounted(() => {
 
   // Устанавливаем фоновое изображение
   const homeElement = document.querySelector('.home');
-  if (homeElement && featuredMovies.value[currentFeaturedIndex.value]) {
+  if (homeElement && featuredItems.value[currentFeaturedIndex.value]) {
     const bgImage = getBackgroundImage();
     homeElement.style.setProperty('--featured-bg', bgImage);
   }
@@ -290,94 +425,99 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="home">
-    <!-- Фиксированная hero секция -->
-    <div class="fixed-container">
-      <section v-if="featuredMovies.length" class="hero">
-        <div class="featured-content">
-          <div class="featured-backdrop" :style="{
-            backgroundImage: getBackgroundImage(),
-          }"></div>
-          <div class="featured-info">
-            <div class="featured-meta">
-              <div class="logo-container">
-                <img
-                  v-if="currentMovieLogo"
-                  :src="currentMovieLogo"
-                  :alt="featuredMovies[currentFeaturedIndex].title"
-                  class="movie-logo desktop-logo"
-                >
-                <h2 class="mobile-logo">{{ featuredMovies[currentFeaturedIndex].title }}</h2>
+  <div class="home-wrapper">
+    <div class="home">
+      <!-- Фиксированная hero секция -->
+      <div class="fixed-container">
+        <section v-if="featuredItems.length" class="hero">
+          <div class="featured-content">
+            <div class="featured-backdrop" :style="{
+              backgroundImage: getBackgroundImage(),
+            }"></div>
+            <div class="featured-info">
+              <div class="featured-meta">
+                <div class="logo-container">
+                  <img
+                    v-if="currentMovieLogo"
+                    :src="currentMovieLogo"
+                    :alt="getCurrentItem.title || getCurrentItem.name"
+                    class="movie-logo desktop-logo"
+                  >
+                  <h2 class="mobile-logo">{{ getCurrentItem.title || getCurrentItem.name }}</h2>
+                </div>
+                <div class="movie-meta">
+                  <span class="movie-rating">{{ movieDetails[getCurrentItem.id]?.rating }}</span>
+                  <span class="movie-rating">{{ getCurrentItem.mediaType === 'movie' ? 'Фильм' : 'Сериал' }}</span>
+                  <span v-if="getCurrentItem.mediaType === 'tv'"
+                        :class="['movie-rating', movieDetails[getCurrentItem.id]?.status === 'Завершен' ? 'ended' : 'ongoing']">
+                    {{ movieDetails[getCurrentItem.id]?.status }}
+                  </span>
+
+                  <span class="movie-genres">{{ movieDetails[getCurrentItem.id]?.genres }}</span>
+                </div>
+                <p class="featured-overview">{{ movieDetails[getCurrentItem.id]?.tagline }}</p>
+                <div class="actions">
+                  <button class="video-button" @click="handleFeaturedClick">
+                    <Icon icon="material-symbols:play-arrow" width="24" />
+                    <span>Смотреть</span>
+                  </button>
+                  <FavoriteButton
+                    v-if="getCurrentItem"
+                    :item="getCurrentItem"
+                    :type="getCurrentItem.mediaType"
+                  />
+                </div>
               </div>
-              <p class="featured-overview">{{ featuredMovies[currentFeaturedIndex].overview }}</p>
-              <div class="actions">
-                <button class="video-button" @click="handleFeaturedClick">
-                  <Icon icon="material-symbols:play-arrow" width="24" />
-                  <span>Смотреть</span>
+              <div class="slider-dots">
+                <button
+                  v-for="(_, index) in featuredItems"
+                  :key="index"
+                  :class="['dot', { active: index === currentFeaturedIndex }]"
+                  @click="switchToSlide(index)">
+                  <div
+                    v-if="index === currentFeaturedIndex"
+                    class="progress-bar"
+                    :style="getProgressBarStyle"
+                  ></div>
                 </button>
               </div>
             </div>
-            <div class="slider-dots">
-              <button
-                v-for="(_, index) in featuredMovies"
-                :key="index"
-                :class="['dot', { active: index === currentFeaturedIndex }]"
-                @click="switchToSlide(index)">
-                <div
-                  v-if="index === currentFeaturedIndex"
-                  class="progress-bar"
-                  :style="getProgressBarStyle"
-                ></div>
-              </button>
-            </div>
           </div>
-        </div>
-      </section>
-    </div>
+        </section>
+      </div>
 
-    <!-- Прокручиваемый контент -->
+      <!-- Прокручиваемый контент -->
       <section class="content-section">
         <div class="content-section-inner">
-          <h2>Фильмы в тренде</h2>
+          <h2>В тренде</h2>
           <div class="content-grid">
-            <div v-for="movie in trendingMovies" :key="movie.id"
+            <div v-for="item in featuredContent" :key="item.id"
               class="content-card"
-              @click="navigateToMovie(movie)">
-              <img :src="`https://imagetmdb.com/t/p/w500${movie.poster_path}`" :alt="movie.title" />
+              @click="navigateToContent(item)">
+              <img :src="`https://imagetmdb.com/t/p/w500${item.poster_path}`" :alt="item.title || item.name" />
               <div class="content-overlay">
                 <div class="meta-info">
-                  <span class="year">{{ movie.release_date?.split('-')[0] }}</span>
-                  <span class="rating">{{ movie.vote_average.toFixed(1) }}</span>
+                  <span class="year">{{ (item.release_date || item.first_air_date)?.split('-')[0] }}</span>
+                  <div class="content-type">
+                    <span class="type">{{ item.mediaType === 'movie' ? 'Фильм' : 'Сериал' }}</span>
+                  </div>
                 </div>
-                <h3 class="content-title">{{ movie.title }}</h3>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section class="content-section">
-        <div class="content-section-inner">
-          <h2>Сериалы в тренде</h2>
-          <div class="content-grid">
-            <div v-for="series in trendingSeries" :key="series.id"
-              class="content-card"
-              @click="navigateToSeries(series)">
-              <img :src="`https://imagetmdb.com/t/p/w500${series.poster_path}`" :alt="series.name" />
-              <div class="content-overlay">
-                <div class="meta-info">
-                  <span class="year">{{ series.first_air_date?.split('-')[0] }}</span>
-                  <span class="rating">{{ series.vote_average.toFixed(1) }}</span>
-                </div>
-                <h3 class="content-title">{{ series.name }}</h3>
+                <h3 class="content-title">{{ item.title || item.name }}</h3>
               </div>
             </div>
           </div>
         </div>
       </section>
     </div>
+  </div>
 </template>
 
 <style scoped>
+.home-wrapper {
+  width: 100%;
+  height: 100%;
+}
+
 /* Обновляем стили для контейнеров */
 .fixed-container {
   position: fixed;
@@ -478,8 +618,16 @@ onUnmounted(() => {
 }
 
 .featured-overview {
-  width: 100%;
-  margin-bottom: 2vh;
+  font-size: calc(var(--font-size-body) * 1.2);
+  line-height: 1.4;
+  margin: var(--spacing-base) 0;
+  height: auto;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+  font-weight: 600;
+  padding: 0;
+  display: block;
 }
 
 .slider-dots {
@@ -638,38 +786,34 @@ onUnmounted(() => {
 }
 
 .featured-overview {
-  font-size: var(--font-size-body);
-  line-height: 1.6;
+  font-size: calc(var(--font-size-body) * 1.2);
+  line-height: 1.4;
   margin: var(--spacing-base) 0;
-  height: 4.8em; /* Точно 3 строки */
-  -webkit-line-clamp: 3;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  height: auto;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+  font-weight: 600;
+  padding: 0;
+  display: block;
 }
 
-/* Кнопки */
-.video-button {
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: var(--button-height);
-  padding: 0 var(--spacing-large);
-  font-size: var(--font-size-body);
-  min-width: 160px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: var(--button-bg);
-  border: none;
-  border-radius: 8px;
-  color: white;
-  position: relative;
-  z-index: 101;
-}
-
-.video-button:hover {
-  background-color: var(--button-hover);
+@media (max-width: 768px) {
+  .featured-overview {
+    font-size: calc(var(--font-size-body) * 1.3);
+    margin: var(--spacing-base) auto;
+    max-width: 100%;
+    text-align: center;
+    height: auto;
+    white-space: normal !important;
+    font-weight: 600;
+    padding: 0;
+    line-height: 1.3;
+    display: block;
+    overflow: visible;
+    -webkit-line-clamp: unset;
+    -webkit-box-orient: unset;
+  }
 }
 
 /* Сетка контента */
@@ -694,7 +838,7 @@ onUnmounted(() => {
 .content-grid {
   display: grid;
   gap: var(--spacing-base);
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   width: 100%;
 }
 
@@ -739,25 +883,40 @@ onUnmounted(() => {
 }
 
 .meta-info {
-  background: linear-gradient(rgba(0, 0, 0, 0.6), transparent);
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent);
   padding: var(--spacing-base);
   display: flex;
   justify-content: space-between;
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.content-type {
+  display: flex;
   align-items: center;
+  justify-content: flex-end;
+}
+
+.type {
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-size: 0.8em;
+  color: white;
+}
+
+.year {
+  font-weight: 500;
+  color: white;
   font-size: clamp(14px, 1vw, 16px);
 }
 
 .content-title {
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
   padding: var(--spacing-base);
-  margin: 0;
-  color: white;
-  font-size: clamp(16px, 1.2vw, 18px);
-  line-height: 1.2;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 .rating, .year {
@@ -941,7 +1100,8 @@ onUnmounted(() => {
 .featured-meta .movie-logo,
 .featured-meta h2,
 .featured-meta .meta-details,
-.featured-meta .featured-overview {
+.featured-meta .featured-overview,
+.featured-meta .movie-meta {
   transition: opacity 0.5s ease;
   opacity: 1;
 }
@@ -949,7 +1109,8 @@ onUnmounted(() => {
 .featured-meta.transitioning .movie-logo,
 .featured-meta.transitioning h2,
 .featured-meta.transitioning .meta-details,
-.featured-meta.transitioning .featured-overview {
+.featured-meta.transitioning .featured-overview,
+.featured-meta.transitioning .movie-meta {
   opacity: 0;
 }
 
@@ -964,7 +1125,8 @@ onUnmounted(() => {
 .home.transitioning .featured-meta .movie-logo,
 .home.transitioning .featured-meta h2,
 .home.transitioning .featured-meta .meta-details,
-.home.transitioning .featured-meta .featured-overview {
+.home.transitioning .featured-meta .featured-overview,
+.home.transitioning .featured-meta .movie-meta {
   opacity: 1;
 }
 
@@ -1004,7 +1166,7 @@ onUnmounted(() => {
   height: 100px;
   display: flex;
   align-items: center;
-  margin-bottom: var(--spacing-base);
+  margin-bottom: var(--spacing-logo);
 }
 
 /* Стили для текстового заголовка */
@@ -1020,6 +1182,7 @@ onUnmounted(() => {
   .logo-container {
     height: auto;
     justify-content: center;
+    margin-bottom: var(--spacing-base);
   }
 
   .logo-container h2 {
@@ -1064,5 +1227,149 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+/* Добавим медиа-запрос для мобильных устройств */
+@media (max-width: 768px) {
+  .featured-overview {
+    font-size: calc(var(--font-size-body) * 1.3);
+    display: -webkit-box;
+    margin: var(--spacing-base) auto;
+    max-width: 100%;
+    text-align: center;
+    height: auto;
+    white-space: normal !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 600;
+    padding: 0 var(--spacing-base);
+    line-height: 1.3;
+  }
+}
+
+/* Стили для мета-информации */
+.movie-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: var(--spacing-base) 0;
+  font-size: calc(var(--font-size-body) * 0.9);
+  color: rgba(255, 255, 255, 0.7);
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  padding-bottom: 5px; /* Для предотвращения обрезания тени */
+}
+
+/* Скрываем скроллбар для Chrome, Safari и Opera */
+.movie-meta::-webkit-scrollbar {
+  display: none;
+}
+
+.movie-rating {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.movie-genres {
+  font-style: normal;
+  opacity: 0.9;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .movie-meta {
+    justify-content: center;
+    flex-wrap: wrap;
+    text-align: center;
+    margin: calc(var(--spacing-base) * 0.5) 0;
+  }
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.video-button{
+  cursor: pointer;
+  transition: all 0.2s ease;
+  height: var(--button-height);
+  padding: 0 var(--spacing-large);
+  font-size: var(--font-size-body);
+  min-width: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: none;
+  border-radius: 8px;
+  position: relative;
+  z-index: 101;
+  font-weight: 600;
+  background: whitesmoke;
+  color: rgb(0, 0, 0);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .actions {
+    flex-direction: column;
+    width: 100%;
+    padding: 0 var(--spacing-base);
+  }
+
+  .video-button,
+  .favorite-button {
+    width: 100%;
+  }
+}
+
+.type {
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-size: 0.8em;
+  color: white;
+  flex-shrink: 0;
+}
+
+.meta-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.series-info {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.series-status {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.series-status.ended {
+  background: rgba(255, 87, 87, 0.2);
+  color: #ff5757;
+}
+
+.series-status.ongoing {
+  background: rgba(87, 255, 87, 0.2);
+  color: #57ff57;
 }
 </style>

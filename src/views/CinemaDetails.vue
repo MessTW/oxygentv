@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useContentStore } from '../stores/content';
 import VideoPlayer from '../components/VideoPlayer.vue';
 import FavoriteButton from '../components/FavoriteButton.vue';
@@ -9,11 +9,21 @@ import { Icon } from '@iconify/vue';
 
 const API_KEY = 'd341436234a2bb8f0adc73114e093ab2';
 const BASE_URL = 'https://apitmdb.cub.red/3';
+const IMAGE_BASE_URL = 'https://imagetmdb.com/t/p';
 
 const route = useRoute();
-const content = ref(null);
-const loading = ref(true);
+const router = useRouter();
+const movieData = ref(null);
+const isLoading = ref(true);
+const error = ref(null);
+const showTitle = ref(false);
+
+const handleLogoError = () => {
+  showTitle.value = true;
+};
+
 const contentStore = useContentStore();
+const imdbId = ref('');
 
 const isMovie = computed(() => route.name === 'movie');
 const contentType = computed(() => isMovie.value ? 'movie' : 'series');
@@ -53,16 +63,16 @@ const getQualityText = (quality) => {
   return qualityMap[quality] || quality || 'Неизвестно';
 };
 
-const getMovieQuality = (id) => {
-  const movie = contentStore.movies.find(m => m.id === Number(id));
+const getMovieQuality = () => {
+  const movie = contentStore.movies.find(m => m.id === Number(route.params.id));
   if (movie?.release_quality) {
     return movie.release_quality;
   }
 
-  if (content.value) {
-    return content.value.release_quality ||
-           content.value.quality ||
-           content.value.video_quality ||
+  if (movieData.value) {
+    return movieData.value.release_quality ||
+           movieData.value.quality ||
+           movieData.value.video_quality ||
            'N/A';
   }
 
@@ -71,81 +81,45 @@ const getMovieQuality = (id) => {
 
 const fetchDetails = async () => {
   try {
-    const type = route.name === 'movie' ? 'movie' : 'tv';
-    const detailsResponse = await fetch(
-      `${BASE_URL}/${type}/${route.params.id}?api_key=${API_KEY}&language=ru-RU&append_to_response=credits,videos`
-    );
-    const details = await detailsResponse.json();
+    isLoading.value = true;
+    const id = route.params.id;
 
-    const imagesResponse = await fetch(
-      `${BASE_URL}/${type}/${route.params.id}/images?api_key=${API_KEY}`
-    );
-    const imagesData = await imagesResponse.json();
-
-    console.log('Raw API response:', details);
-    console.log('Images response:', imagesData);
-
-    if (details.blocked === true || (!details.title && !details.name) || !details.id) {
-      content.value = {
-        id: route.params.id,
-        name: 'Контент недоступен',
-        overview: 'К сожалению, этот контент сейчас недоступен для просмотра.',
-        blocked: true
-      };
-      return;
+    if (!id) {
+      throw new Error('Movie ID not found');
     }
 
-    const filterLogos = (logos, language) => {
-      if (!logos) return null;
-      return logos
-        .filter(logo =>
-          logo.iso_639_1 === language &&
-          logo.file_path &&
-          (language === 'ru' || (
-            logo.aspect_ratio >= 2 &&
-            logo.aspect_ratio <= 5 &&
-            logo.height >= 100 &&
-            logo.height <= 200
-          ))
-        )
-        [0];
-    };
+    const response = await fetch(
+      `${BASE_URL}/${route.name === 'movie' ? 'movie' : 'tv'}/${id}?api_key=${API_KEY}&language=ru&append_to_response=credits,images`
+    );
 
-    const russianLogo = filterLogos(imagesData.logos, 'ru');
-    const englishLogo = filterLogos(imagesData.logos, 'en');
-    const anyLogo = imagesData.logos
-      ?.filter(logo =>
-        logo.file_path &&
-        logo.aspect_ratio >= 2 &&
-        logo.aspect_ratio <= 5 &&
-        logo.height >= 100 &&
-        logo.height <= 200
-      )
-      [0];
+    if (!response.ok) {
+      throw new Error('Failed to fetch movie data');
+    }
 
-    content.value = {
-      ...details,
-      blocked: details.blocked || false,
-      title: details.title || details.name,
-      release_date: details.release_date || details.first_air_date,
-      release_quality: getMovieQuality(route.params.id),
-      logo_path: russianLogo?.file_path || englishLogo?.file_path || anyLogo?.file_path || null
-    };
+    movieData.value = await response.json();
+    if (movieData.value.images?.logos?.length > 0) {
+      const ruLogo = movieData.value.images.logos.find(logo => logo.iso_639_1 === 'ru');
+      const enLogo = movieData.value.images.logos.find(logo => logo.iso_639_1 === 'en');
+      movieData.value.logo_path = (ruLogo || enLogo)?.file_path;
+    }
+    document.title = `${movieData.value.title || movieData.value.name} | oxyge tv`;
+    isLoading.value = false;
 
-  } catch (error) {
-    console.error('Error fetching details:', error);
-  } finally {
-    loading.value = false;
+  } catch (err) {
+    console.error(err);
+    error.value = err.message;
+    isLoading.value = false;
+    router.push('/');
   }
 };
 
 const getCurrentUrl = () => window.location.href;
 
-onMounted(() => {
+onMounted(async () => {
   fetchDetails();
 });
 
-watch(() => content.value, (newData) => {
+watch(() => movieData.value, (newData) => {
   if (newData?.title || newData?.name) {
     document.title = `${newData.title || newData.name}`
   }
@@ -155,20 +129,20 @@ watch(() => content.value, (newData) => {
 <template>
   <div class="page-wrapper">
     <div class="cinema-details">
-      <div class="backdrop" :style="content?.backdrop_path ? {
-        backgroundImage: `url(https://imagetmdb.com/t/p/original${content.backdrop_path})`
+      <div class="backdrop" :style="movieData?.backdrop_path ? {
+        backgroundImage: `url(${IMAGE_BASE_URL}/original${movieData.backdrop_path})`
       } : { backgroundColor: '#000' }">
       </div>
-      <div v-if="loading" class="loading">
+      <div v-if="isLoading" class="loading">
         <div class="loader"></div>
       </div>
-      <div v-else-if="content">
+      <div v-else-if="movieData">
         <div class="content">
-          <div v-if="content.blocked" class="blocked-notice">
+          <div v-if="movieData.blocked" class="blocked-notice">
             <div class="blocked-content">
               <Icon icon="mdi:lock" class="lock-icon" width="48" />
-              <h1>{{ content.title }}</h1>
-              <p>{{ content.overview }}</p>
+              <h1>{{ movieData.title }}</h1>
+              <p>{{ movieData.overview }}</p>
               <button class="home-button" @click="$router.push('/')">
                 <Icon icon="mdi:home" width="24" />
                 <span>На главную</span>
@@ -178,61 +152,69 @@ watch(() => content.value, (newData) => {
           <div v-else class="content-wrapper">
             <div class="title-container">
               <img
-                v-if="content.logo_path"
-                :src="`https://imagetmdb.com/t/p/w500${content.logo_path}`"
-                :alt="content.title"
+                v-if="movieData.logo_path"
+                :src="`${IMAGE_BASE_URL}/original${movieData.logo_path}`"
+                :alt="movieData.title"
                 class="movie-logo"
+                @error="handleLogoError"
               >
-              <h1 v-else class="details-title">{{ content.title }}</h1>
+              <h1 v-if="!movieData.logo_path || showTitle" class="details-title">
+                {{ movieData.title || movieData.name }}
+              </h1>
             </div>
             <div class="left-column">
               <div class="meta-line">
                 <span class="quality">
-                  {{ getQualityText(content.release_quality || getMovieQuality(route.params.id)) }}
+                  {{ getQualityText(movieData.release_quality || getMovieQuality()) }}
                 </span>
-                <span class="rating">{{ content.vote_average?.toFixed(1) || 'N/A' }}</span>
+                <span class="rating">{{ movieData.vote_average?.toFixed(1) || 'N/A' }}</span>
                 <span class="dot-separator">•</span>
-                <span v-if="content.release_date">
-                  {{ new Date(content.release_date).getFullYear() }}
+                <span v-if="movieData.release_date">
+                  {{ new Date(movieData.release_date).getFullYear() }}
                 </span>
                 <span class="dot-separator">•</span>
-                <div class="country-item" v-if="content.production_countries?.[0]">
+                <div class="country-item" v-if="movieData.production_countries?.[0]">
                   <Icon
-                    :icon="`flagpack:${content.production_countries[0].iso_3166_1.toLowerCase()}`"
+                    :icon="`flagpack:${movieData.production_countries[0].iso_3166_1.toLowerCase()}`"
                     class="flag-icon"
                   />
                 </div>
                 <span class="dot-separator">•</span>
-                <span class="genres" v-if="content.genres?.length">
-                  {{ content.genres?.map(genre => genre.name).join(', ') }}
+                <span class="genres" v-if="movieData.genres?.length">
+                  {{ movieData.genres?.map(genre => genre.name).join(', ') }}
                 </span>
                 <span class="dot-separator">•</span>
-                <span v-if="!isMovie && content.number_of_seasons">
-                  {{ content.number_of_seasons }} {{ getSeasonText(content.number_of_seasons) }}
+                <span v-if="!isMovie && movieData.number_of_seasons">
+                  {{ movieData.number_of_seasons }} {{ getSeasonText(movieData.number_of_seasons) }}
                 </span>
-                <span v-if="content.runtime || content.episode_run_time?.[0]">
-                  {{ content.runtime || content.episode_run_time[0] }} мин
+                <span v-if="movieData.runtime || movieData.episode_run_time?.[0]">
+                  {{ movieData.runtime || movieData.episode_run_time[0] }} мин
                 </span>
               </div>
-              <p class="overview" v-if="content.overview">{{ content.overview }}</p>
+              <p class="overview" v-if="movieData.overview">{{ movieData.overview }}</p>
               <div class="buttons-group">
                 <div class="primary-buttons">
                   <VideoPlayer
-                    :id="content.id.toString()"
+                    :tmdb-id="String(movieData.id)"
+                    :imdb-id="imdbId || ''"
+                    :year="String(new Date(movieData.release_date).getFullYear())"
                     :type="contentType"
-                    :title="content.title"
+                    :title="movieData.title"
                     class="watch-button"
                   />
                   <button
                     class="torrent-button"
-                    @click="$router.push(`/${contentType}/${content.id}/torrent`)"
+                    @click="$router.push({
+                      name: `${contentType}-torrents`,
+                      params: { id: movieData.id }
+                    })"
                   >
                     <Icon icon="mdi:download" width="24" />
                     Торренты
                   </button>
                   <div class="secondary-buttons">
                   <FavoriteButton
-                    :item="content"
+                    :item="movieData"
                     :type="contentType"
                   />
                   <ShareButton
@@ -246,14 +228,17 @@ watch(() => content.value, (newData) => {
 
             <div class="right-column">
               <div class="credits">
-                <div class="credit-section" v-if="isMovie && content.credits?.crew">
+                <div
+                  class="credit-section"
+                  v-if="isMovie && movieData.credits?.crew?.some(person => person.job === 'Director')"
+                >
                   <h3>Режиссеры:</h3>
                   <div class="persons-list">
-                    <div v-for="director in content.credits?.crew?.filter(person => person.job === 'Director')"
+                    <div v-for="director in movieData.credits?.crew?.filter(person => person.job === 'Director')"
                          :key="director.id"
                          class="person-card">
                       <img
-                        :src="director.profile_path ? `https://imagetmdb.com/t/p/w185${director.profile_path}` : 'https://via.placeholder.com/185x278/1a1a1a/5f5f5f?text=No+Photo'"
+                        :src="director.profile_path ? `${IMAGE_BASE_URL}/w500${director.profile_path}` : 'https://via.placeholder.com/185x278/1a1a1a/5f5f5f?text=No+Photo'"
                         :alt="director.name"
                         class="person-photo"
                       >
@@ -264,14 +249,17 @@ watch(() => content.value, (newData) => {
                     </div>
                   </div>
                 </div>
-                <div class="credit-section">
+                <div
+                  class="credit-section"
+                  v-if="movieData.credits?.cast?.length > 0"
+                >
                   <h3>В ролях:</h3>
                   <div class="persons-list">
-                    <div v-for="actor in content.credits?.cast?.slice(0, 6)"
+                    <div v-for="actor in movieData.credits?.cast?.slice(0, 6)"
                          :key="actor.id"
                          class="person-card">
                       <img
-                        :src="actor.profile_path ? `https://imagetmdb.com/t/p/w185${actor.profile_path}` : 'https://via.placeholder.com/185x278/1a1a1a/5f5f5f?text=No+Photo'"
+                        :src="actor.profile_path ? `${IMAGE_BASE_URL}/w500${actor.profile_path}` : 'https://via.placeholder.com/185x278/1a1a1a/5f5f5f?text=No+Photo'"
                         :alt="actor.name"
                         class="person-photo"
                       >
@@ -731,15 +719,17 @@ watch(() => content.value, (newData) => {
 }
 
 .title-container {
-  margin-bottom: 2rem;
-  max-width: 400px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 1rem;
+  min-height: 60px;
 }
 
 .movie-logo {
+  max-height: 60px;
   max-width: 100%;
-  width: 100%;
-  height: auto;
-  filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.5));
+  object-fit: contain;
 }
 
 .primary-buttons {
