@@ -1,11 +1,11 @@
-<!-- eslint-disable vue/multi-word-component-names -->
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { Icon } from '@iconify/vue'
 import { useLogoStore } from '@/stores/logoStore'
 import { useBlockListStore } from '@/stores/blockList'
-import FavoriteButton from '@/components/FavoriteButton.vue'
+import api from '@/plugins/axios'
+import ContentSkeleton from '@/components/ContentSkeleton.vue'
 
 const API_KEY = 'd341436234a2bb8f0adc73114e093ab2'
 const BASE_URL = 'https://apitmdb.cub.red/3'
@@ -20,6 +20,7 @@ const autoplayInterval = ref(null)
 const currentFeaturedIndex = ref(0)
 const isMobile = ref(false)
 const movieDetails = ref({})
+const isLoading = ref(true)
 
 const router = useRouter()
 
@@ -124,19 +125,68 @@ const formatGenres = (genres) => {
     .replace(/ и /g, ' ');
 }
 
-// Добавим функцию для обрезки текста
+// Функция для обрезки текста
 const truncateText = (text, maxLength = 80) => {
   if (!text) return '';
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength).trim() + '...';
 }
 
+// Добавьте новую функцию для получения изображений с текстом
+const getBackdropWithText = async (item) => {
+  try {
+    const response = await api.get(`${item.mediaType}/${item.id}/images`, {
+      params: {
+        language: 'ru-RU',
+        include_image_language: 'ru'
+      }
+    });
+
+    // Ищем первый backdrop с русским текстом
+    const russianBackdrop = response.data.backdrops?.find(backdrop =>
+      backdrop.iso_639_1 === 'ru'
+    );
+
+    // Если нашли backdrop с текстом - возвращаем его путь, иначе стандартный
+    return russianBackdrop
+      ? `https://imagetmdb.com/t/p/w780${russianBackdrop.file_path}`
+      : `https://imagetmdb.com/t/p/w780${item.backdrop_path}`;
+  } catch (error) {
+    console.error('Error fetching backdrop with text:', error);
+    return `https://imagetmdb.com/t/p/w780${item.backdrop_path}`;
+  }
+};
+
+// Добавьте новый реактивный объект для хранения путей к изображениям
+const backdropPaths = ref({});
+
+// Модифицируйте fetchTrending для загрузки изображений с текстом
 const fetchTrending = async () => {
   try {
-    const moviesResponse = await fetch(
-      `${BASE_URL}/trending/movie/week?api_key=${API_KEY}&language=ru-RU`,
-    )
-    const moviesData = await moviesResponse.json()
+    // Проверяем есть ли все данные в кэше
+    const hasAllCachedData = featuredItems.value.every(item =>
+      logoStore.logos[item.id] &&
+      logoStore.details[item.id]
+    );
+
+    // Устанавливаем isLoading только если нет кэшированных данных
+    if (!hasAllCachedData) {
+      isLoading.value = true
+    }
+
+    const [moviesData, seriesData] = await Promise.all([
+      api.get('trending/movie/week', {
+        params: {
+          language: 'ru-RU'
+        }
+      }).then(res => res.data),
+      api.get('trending/tv/week', {
+        params: {
+          language: 'ru-RU'
+        }
+      }).then(res => res.data)
+    ]);
+
     const filteredMovies = moviesData.results
       .filter(movie =>
         movie.title &&
@@ -147,10 +197,6 @@ const fetchTrending = async () => {
       )
       .map(movie => ({ ...movie, mediaType: 'movie' }));
 
-    const seriesResponse = await fetch(
-      `${BASE_URL}/trending/tv/week?api_key=${API_KEY}&language=ru-RU`,
-    )
-    const seriesData = await seriesResponse.json()
     const filteredSeries = seriesData.results
       .filter(show =>
         show.name &&
@@ -161,54 +207,90 @@ const fetchTrending = async () => {
       )
       .map(show => ({ ...show, mediaType: 'tv', routeType: 'series' }));
 
-    // Объединяем фильмы и сериалы для слайдера (берем первые 5)
-    featuredItems.value = [...filteredMovies, ...filteredSeries]
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 5);
+    // Set default values if both requests fail
+    featuredItems.value = (filteredMovies.length || filteredSeries.length)
+      ? [...filteredMovies, ...filteredSeries]
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 5)
+      : [];
 
-    // Объединяем и перемешиваем все фильмы и сериалы для сетки
-    featuredContent.value = [...filteredMovies, ...filteredSeries]
-      .sort(() => Math.random() - 0.5);
+    featuredContent.value = (filteredMovies.length || filteredSeries.length)
+      ? [...filteredMovies, ...filteredSeries]
+          .sort(() => Math.random() - 0.5)
+      : [];
 
-    // Загружаем логотипы для всех элементов (фильмов и сериалов)
-    for (const item of featuredItems.value) {
-      await fetchLogo(item)
-    }
+    // Загружаем логотипы только для тех элементов, которых нет в кэше
+    await Promise.all(featuredItems.value
+      .filter(item => !logoStore.logos[item.id])
+      .map(item => fetchLogo(item))
+    );
 
-    for (const item of featuredItems.value) {
+    // Загружаем детали только для тех элементов, которых нет в кэше
+    await Promise.all(featuredItems.value
+      .filter(item => !logoStore.details[item.id])
+      .map(async (item) => {
       try {
-        const detailsResponse = await fetch(
-          `${BASE_URL}/${item.mediaType}/${item.id}?api_key=${API_KEY}&language=ru-RU&append_to_response=release_dates`
-        )
-        const details = await detailsResponse.json()
+        const { data: details } = await api.get(`${item.mediaType}/${item.id}`, {
+          params: {
+            language: 'ru-RU',
+            append_to_response: 'release_dates'
+          }
+        })
+
+        // Fallback data in case of missing information
+        const fallbackData = {
+          tagline: item.overview?.split('.')[0] + '.',
+          rating: getAgeRating(item),
+          genres: '',
+          status: item.mediaType === 'tv' ? 'Выходит' : undefined
+        }
+
         // Разная обработка для фильмов и сериалов
         if (item.mediaType === 'tv') {
           const status = details.status === 'Ended' ? 'Завершен' : 'Выходит';
 
-          movieDetails.value[item.id] = {
-            tagline: truncateText(details.tagline || item.overview.split('.')[0]),
-            rating: getAgeRating(details),
+          const itemDetails = {
+            type: 'Сериал',
+            tagline: truncateText(details.tagline || fallbackData.tagline),
+            rating: getAgeRating(details) || fallbackData.rating,
             genres: formatGenres(details.genres) || '',
             status: status
-          }
+          };
+
+          movieDetails.value[item.id] = itemDetails;
+          logoStore.cacheDetails(item.id, itemDetails);
         } else {
-          movieDetails.value[item.id] = {
-            tagline: truncateText(details.tagline || item.overview.split('.')[0]),
-            rating: getAgeRating(details),
+          const itemDetails = {
+            type: 'Фильм',
+            tagline: truncateText(details.tagline || fallbackData.tagline),
+            rating: getAgeRating(details) || fallbackData.rating,
             genres: formatGenres(details.genres) || ''
-          }
+          };
+
+          movieDetails.value[item.id] = itemDetails;
+          logoStore.cacheDetails(item.id, itemDetails);
         }
       } catch (error) {
         console.error('Error fetching details:', error)
+        // Use fallback data if the API request fails
         movieDetails.value[item.id] = {
-          tagline: item.overview.split('.')[0] + '.',
+          tagline: item.overview?.split('.')[0] + '.',
           rating: getAgeRating(item),
-          genres: ''
+          genres: '',
+          status: item.mediaType === 'tv' ? 'Выходит' : undefined
         }
       }
-    }
+    }));
+
+    // После получения списка фильмов/сериалов загружаем изображения с текстом
+    await Promise.all(featuredContent.value.map(async (item) => {
+      backdropPaths.value[item.id] = await getBackdropWithText(item);
+    }));
+
   } catch (error) {
     console.error('Error:', error)
+  } finally {
+    isLoading.value = false
   }
 }
 
@@ -242,6 +324,7 @@ const startAutoplay = () => {
       // Ждем завершения анимации затухания
       setTimeout(() => {
         currentFeaturedIndex.value = (currentFeaturedIndex.value + 1) % featuredItems.value.length;
+        updateBackgroundImage();
 
         // Ждем обновления DOM и запускаем анимацию появления
         nextTick(() => {
@@ -250,7 +333,7 @@ const startAutoplay = () => {
             meta.classList.remove('transitioning');
           });
         });
-      }, 500); // Время совпадает с длительностью transition в CSS
+      }, 500);
     }
 
     resetProgress();
@@ -309,15 +392,64 @@ const switchToSlide = (index) => {
   startAutoplay();
 }
 
-// Предзагрузка следующего изображения
-const preloadNextImage = () => {
+// Добавляем кэш для фоновых изображений
+const backgroundCache = ref({})
+
+// Функция для предзагрузки изображения
+const preloadImage = (url) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(url)
+    img.onerror = reject
+    img.src = url
+  })
+}
+
+const getBackgroundImage = () => {
+  const movie = featuredItems.value[currentFeaturedIndex.value];
+  if (!movie) return '';
+
+  const isMobile = window.innerWidth <= 768;
+  const path = isMobile ? movie.poster_path : movie.backdrop_path;
+  const cacheKey = `${movie.id}-${isMobile ? 'mobile' : 'desktop'}`
+
+  // Проверяем кэш
+  if (backgroundCache.value[cacheKey]) {
+    return backgroundCache.value[cacheKey];
+  }
+
+  const imageUrl = `url(https://imagetmdb.com/t/p/original${path})`;
+  backgroundCache.value[cacheKey] = imageUrl;
+
+  // Обновляем фон страницы только для десктопа
+  if (!isMobile) {
+    const homeElement = document.querySelector('.home');
+    if (homeElement) {
+      homeElement.style.setProperty('--featured-bg', imageUrl);
+    }
+  }
+
+  return imageUrl;
+};
+
+const preloadNextImage = async () => {
   const nextIndex = (currentFeaturedIndex.value + 1) % featuredItems.value.length;
   const nextMovie = featuredItems.value[nextIndex];
   if (nextMovie) {
     const isMobile = window.innerWidth <= 768;
     const path = isMobile ? nextMovie.poster_path : nextMovie.backdrop_path;
-    const imageUrl = `https://imagetmdb.com/t/p/original${path}`;
-    new Image().src = imageUrl;
+    const cacheKey = `${nextMovie.id}-${isMobile ? 'mobile' : 'desktop'}`
+
+    // Загружаем только если нет в кэше
+    if (!backgroundCache.value[cacheKey]) {
+      const imageUrl = `https://imagetmdb.com/t/p/original${path}`;
+      try {
+        await preloadImage(imageUrl);
+        backgroundCache.value[cacheKey] = `url(${imageUrl})`;
+      } catch (error) {
+        console.error('Error preloading image:', error);
+      }
+    }
   }
 }
 
@@ -335,29 +467,23 @@ const handleScroll = () => {
   }
 };
 
-const getBackgroundImage = () => {
-  const movie = featuredItems.value[currentFeaturedIndex.value];
-  if (!movie) return '';
-
-  const isMobile = window.innerWidth <= 768;
-  const path = isMobile ? movie.poster_path : movie.backdrop_path;
-  const imageUrl = `url(https://imagetmdb.com/t/p/original${path})`;
-
-  // Обновляем фон страницы только для десктопа
-  if (!isMobile) {
-    const homeElement = document.querySelector('.home');
-    if (homeElement) {
-      homeElement.style.setProperty('--featured-bg', imageUrl);
-    }
-  }
-
-  return imageUrl;
-};
-
 const updateBackgroundImage = () => {
   const backdrop = document.querySelector('.featured-backdrop');
+  const homeElement = document.querySelector('.home');
   if (backdrop) {
+    // Добавляем класс для анимации
+    backdrop.classList.add('transitioning');
     backdrop.style.backgroundImage = getBackgroundImage();
+
+    // Обновляем фон для десктопа
+    if (!isMobile.value && homeElement) {
+      homeElement.style.setProperty('--featured-bg', getBackgroundImage());
+    }
+
+    // Удаляем класс после завершения перехода
+    setTimeout(() => {
+      backdrop.classList.remove('transitioning');
+    }, 300);
   }
 };
 
@@ -392,10 +518,60 @@ const getCurrentItem = computed(() => {
   return featuredItems.value[currentFeaturedIndex.value]
 })
 
+// Добавляем computed свойство для деталей текущего элемента
+const currentItemDetails = computed(() => {
+  const item = getCurrentItem.value;
+  if (!item) return null;
+
+  // Сначала проверяем кэш
+  const cachedDetails = logoStore.getDetails(item.id);
+  if (cachedDetails) return cachedDetails;
+
+  return {
+    type: item.mediaType === 'movie' ? 'Фильм' : 'Сериал',
+    rating: movieDetails.value[item.id]?.rating || getAgeRating(item),
+    status: item.mediaType === 'tv'
+      ? (movieDetails.value[item.id]?.status || 'Выходит')
+      : undefined,
+    genres: movieDetails.value[item.id]?.genres || '',
+    tagline: movieDetails.value[item.id]?.tagline ||
+      truncateText(item.overview?.split('.')[0] + '.')
+  };
+});
+
+// Функция для очистки деталей
+const clearDetails = () => {
+  movieDetails.value = {}
+}
+
+// Функция для установки начальных деталей
+const setInitialDetails = () => {
+  if (!getCurrentItem.value) return;
+
+  const item = getCurrentItem.value;
+  movieDetails.value[item.id] = {
+    type: item.mediaType === 'movie' ? 'Фильм' : 'Сериал',
+    rating: getAgeRating(item),
+    status: item.mediaType === 'tv' ? 'Выходит' : undefined,
+    genres: '',
+    tagline: truncateText(item.overview?.split('.')[0] + '.')
+  }
+}
+// Добавляем функцию для получения названия
+const getTitle = (item) => {
+  // Сначала проверяем русское название
+  if (item.title || item.name) {
+    return item.title || item.name;
+  }
+  // Если русского нет, используем оригинальное
+  return item.original_title || item.original_name;
+}
+
 onMounted(() => {
   fetchTrending()
   fetchGenres()
   startAutoplay()
+  setInitialDetails() // Добавляем начальные значения
   window.addEventListener('resize', updateBackgroundImage)
   window.addEventListener('scroll', handleScroll)
   updateIsMobile() // Инициализируем значение
@@ -413,11 +589,14 @@ onMounted(() => {
 
 watch(currentFeaturedIndex, () => {
   preloadNextImage();
+  updateBackgroundImage();
 })
 
 onUnmounted(() => {
   stopAutoplay()
   resetProgress()
+  clearDetails() // Очищаем детали при размонтировании
+  backgroundCache.value = {} // Очищаем кэш фоновых изображений
   window.removeEventListener('resize', updateBackgroundImage)
   window.removeEventListener('scroll', handleScroll)
   window.removeEventListener('resize', updateIsMobile)
@@ -433,9 +612,11 @@ onUnmounted(() => {
           <div class="featured-content">
             <div class="featured-backdrop" :style="{
               backgroundImage: getBackgroundImage(),
-            }"></div>
+            }">
+            </div>
             <div class="featured-info">
-              <div class="featured-meta">
+              <ContentSkeleton v-if="isLoading" />
+              <div v-else class="featured-meta">
                 <div class="logo-container">
                   <img
                     v-if="currentMovieLogo"
@@ -446,26 +627,21 @@ onUnmounted(() => {
                   <h2 class="mobile-logo">{{ getCurrentItem.title || getCurrentItem.name }}</h2>
                 </div>
                 <div class="movie-meta">
-                  <span class="movie-rating">{{ movieDetails[getCurrentItem.id]?.rating }}</span>
-                  <span class="movie-rating">{{ getCurrentItem.mediaType === 'movie' ? 'Фильм' : 'Сериал' }}</span>
+                  <span class="movie-rating">{{ currentItemDetails?.rating }}</span>
+                  <span class="movie-rating">{{ currentItemDetails?.type }}</span>
                   <span v-if="getCurrentItem.mediaType === 'tv'"
-                        :class="['movie-rating', movieDetails[getCurrentItem.id]?.status === 'Завершен' ? 'ended' : 'ongoing']">
-                    {{ movieDetails[getCurrentItem.id]?.status }}
+                        :class="['movie-rating', currentItemDetails?.status === 'Завершен' ? 'ended' : 'ongoing']">
+                    {{ currentItemDetails?.status }}
                   </span>
 
-                  <span class="movie-genres">{{ movieDetails[getCurrentItem.id]?.genres }}</span>
+                  <span class="movie-genres">{{ currentItemDetails?.genres }}</span>
                 </div>
-                <p class="featured-overview">{{ movieDetails[getCurrentItem.id]?.tagline }}</p>
+                <p class="featured-overview">{{ currentItemDetails?.tagline }}</p>
                 <div class="actions">
                   <button class="video-button" @click="handleFeaturedClick">
-                    <Icon icon="material-symbols:play-arrow" width="24" />
-                    <span>Смотреть</span>
+                    <Icon icon="ic:outline-info" width="24" />
+                    <span>Подробнее</span>
                   </button>
-                  <FavoriteButton
-                    v-if="getCurrentItem"
-                    :item="getCurrentItem"
-                    :type="getCurrentItem.mediaType"
-                  />
                 </div>
               </div>
               <div class="slider-dots">
@@ -491,19 +667,26 @@ onUnmounted(() => {
         <div class="content-section-inner">
           <h2>В тренде</h2>
           <div class="content-grid">
-            <div v-for="item in featuredContent" :key="item.id"
+            <template v-if="isLoading">
+              <div v-for="n in 10" :key="n" class="content-card skeleton">
+                <div class="skeleton-poster"></div>
+              </div>
+            </template>
+            <div v-else v-for="item in featuredContent" :key="item.id"
               class="content-card"
               @click="navigateToContent(item)">
-              <img :src="`https://imagetmdb.com/t/p/w500${item.poster_path}`" :alt="item.title || item.name" />
+              <img
+                :src="`https://imagetmdb.com/t/p/w342${item.poster_path}`"
+                :alt="getTitle(item)"
+                loading="eager"
+              />
               <div class="content-overlay">
-                <div class="meta-info">
-                  <span class="year">{{ (item.release_date || item.first_air_date)?.split('-')[0] }}</span>
-                  <div class="content-type">
-                    <span class="type">{{ item.mediaType === 'movie' ? 'Фильм' : 'Сериал' }}</span>
-                  </div>
-                </div>
-                <h3 class="content-title">{{ item.title || item.name }}</h3>
-              </div>
+  <div class="meta-info">
+    <span class="movie-rating">{{ (item.release_date || item.first_air_date)?.split('-')[0] }}</span>
+    <span class="movie-type">{{ item.mediaType === 'movie' ? 'Фильм' : 'Сериал' }}</span>
+  </div>
+  <h3 class="content-title">{{ getTitle(item) }}</h3>
+</div>
             </div>
           </div>
         </div>
@@ -838,8 +1021,9 @@ onUnmounted(() => {
 .content-grid {
   display: grid;
   gap: var(--spacing-base);
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); /* Меняем на более узкие колонки */
   width: 100%;
+  justify-content: start;
 }
 
 /* Карточки */
@@ -863,11 +1047,6 @@ onUnmounted(() => {
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: filter 0.2s ease;
-}
-
-.content-card:hover img {
-  filter: brightness(0.7);
 }
 
 .content-overlay {
@@ -879,16 +1058,34 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  z-index: 1;
+  background: linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.9) 0%,
+    rgba(0, 0, 0, 0.1) 50%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.content-title {
+  padding: var(--spacing-base);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .meta-info {
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent);
   padding: var(--spacing-base);
   display: flex;
   justify-content: space-between;
-  font-size: 0.9em;
-  color: rgba(255, 255, 255, 0.7);
+  gap: 0.5rem;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.8) 0%,
+    rgba(0, 0, 0, 0) 100%
+  );
 }
 
 .content-type {
@@ -1018,7 +1215,7 @@ onUnmounted(() => {
   }
 
   .content-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(1, 1fr);
     gap: 0.75rem;
   }
 
@@ -1275,6 +1472,15 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.movie-type {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  font-weight: 500;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 .movie-genres {
   font-style: normal;
   opacity: 0.9;
@@ -1371,5 +1577,56 @@ onUnmounted(() => {
 .series-status.ongoing {
   background: rgba(87, 255, 87, 0.2);
   color: #57ff57;
+}
+
+/* Добавляем стили для скелетона карточек */
+.content-card.skeleton {
+  width: 100%;
+  aspect-ratio: 2/3;
+  background: rgba(255, 255, 255, 0.1);
+  animation: pulse 1.5s infinite;
+}
+
+.skeleton-poster {
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 0.6;
+  }
+}
+
+/* Добавляем плавные переходы для контента */
+.featured-meta,
+.content-card {
+  transition: opacity 0.3s ease;
+}
+
+.featured-meta > *,
+.content-card > * {
+  transition: opacity 0.3s ease;
+}
+
+.featured-backdrop {
+  transition: opacity 0.3s ease;
+}
+
+.featured-backdrop.transitioning {
+  opacity: 0;
+}
+
+/* Добавляем задержку для возврата opacity */
+.featured-backdrop:not(.transitioning) {
+  opacity: 1;
 }
 </style>

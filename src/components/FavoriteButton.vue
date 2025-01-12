@@ -36,9 +36,9 @@ const isFavorite = () => {
     class="favorite-button"
     @click="toggleFavorite"
     :class="{ active: isFavorite() }"
-    :title="isFavorite() ? 'Удалить из избранного' : 'Добавить в избранное'"
   >
     <Icon :icon="isFavorite() ? 'mdi:heart' : 'mdi:heart-outline'" width="24" />
+    <span>{{ isFavorite() ? 'Удалить из бибилиотеки' : 'Добавить в бибилиотеку' }}</span>
   </button>
 </template>
 

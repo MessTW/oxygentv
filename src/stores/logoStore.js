@@ -2,7 +2,8 @@ import { defineStore } from 'pinia'
 
 export const useLogoStore = defineStore('logo', {
   state: () => ({
-    logos: {}
+    logos: {},
+    details: {}
   }),
 
   actions: {
@@ -43,6 +44,14 @@ export const useLogoStore = defineStore('logo', {
       } finally {
         this.isLoading = false
       }
+    },
+
+    cacheDetails(id, details) {
+      this.details[id] = details
+    },
+
+    getDetails(id) {
+      return this.details[id]
     }
   }
 })

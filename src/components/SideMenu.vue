@@ -85,7 +85,7 @@ nav {
   align-items: center;
   justify-content: center;
   padding: 12px;
-  color: var(--text-secondary);
+  color: snow;
   text-decoration: none;
   position: relative;
   border-radius: 12px;
@@ -102,7 +102,7 @@ nav {
   transform: translateX(-50%);
   width: 0;
   height: 3px;
-  background-color: var(--accent);
+  background-color: snow;
   transition: width 0.2s ease;
 }
 
@@ -115,7 +115,7 @@ nav {
 }
 
 .nav-item.router-link-active {
-  color: var(--accent);
+  color: snow;
 }
 
 @media (max-width: 768px) {
@@ -179,7 +179,7 @@ nav {
   }
 
   .nav-item.router-link-active {
-    color: var(--accent);
+    color: snow;
   }
 }
 </style>

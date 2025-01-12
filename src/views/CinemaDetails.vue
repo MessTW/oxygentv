@@ -6,6 +6,7 @@ import VideoPlayer from '../components/VideoPlayer.vue';
 import FavoriteButton from '../components/FavoriteButton.vue';
 import ShareButton from '../components/ShareButton.vue';
 import { Icon } from '@iconify/vue';
+import AllohaPlayer from '../components/AllohaPlayer.vue';
 
 const API_KEY = 'd341436234a2bb8f0adc73114e093ab2';
 const BASE_URL = 'https://apitmdb.cub.red/3';
@@ -17,13 +18,15 @@ const movieData = ref(null);
 const isLoading = ref(true);
 const error = ref(null);
 const showTitle = ref(false);
+const seasons = ref([]);
+const selectedSeason = ref(null);
+const isLoadingSeasons = ref(false);
 
 const handleLogoError = () => {
   showTitle.value = true;
 };
 
 const contentStore = useContentStore();
-const imdbId = ref('');
 
 const isMovie = computed(() => route.name === 'movie');
 const contentType = computed(() => isMovie.value ? 'movie' : 'series');
@@ -79,30 +82,89 @@ const getMovieQuality = () => {
   return 'N/A';
 };
 
+const fetchSeasons = async () => {
+  if (!isMovie.value && movieData.value?.id) {
+    try {
+      isLoadingSeasons.value = true;
+
+      // Получаем сезоны из основных данных сериала
+      if (movieData.value.seasons) {
+        // Фильтруем сезоны, исключая спецматериалы
+        seasons.value = movieData.value.seasons
+          .filter(season => season.season_number !== 0) // Исключаем спецвыпуски (season_number = 0)
+          .map(season => ({
+            ...season,
+            episodes: []
+          }));
+
+        // Загружаем детали для каждого сезона
+        await Promise.all(seasons.value.map(async (season) => {
+          try {
+            const seasonResponse = await fetch(
+              `${BASE_URL}/tv/${movieData.value.id}/season/${season.season_number}?api_key=${API_KEY}&language=ru`
+            );
+            if (seasonResponse.ok) {
+              const seasonData = await seasonResponse.json();
+              // Фильтруем эпизоды, исключая спецвыпуски если они есть
+              season.episodes = (seasonData.episodes || [])
+                .filter(episode => episode.season_number !== 0);
+            }
+          } catch (err) {
+            console.error(`Error fetching season ${season.season_number}:`, err);
+            season.episodes = [];
+          }
+        }));
+
+        if (seasons.value.length > 0) {
+          selectedSeason.value = seasons.value[0];
+        }
+      }
+
+      // Сохраняем данные о сериях для использования в плеере
+      const seasonsData = seasons.value.reduce((acc, season) => {
+        acc[season.season_number] = season.episodes.length;
+        return acc;
+      }, {});
+
+      localStorage.setItem('currentSeriesData', JSON.stringify({
+        seasons: seasonsData
+      }));
+
+    } catch (err) {
+      console.error('Error fetching seasons:', err);
+    } finally {
+      isLoadingSeasons.value = false;
+    }
+  }
+};
+
 const fetchDetails = async () => {
   try {
     isLoading.value = true;
-    const id = route.params.id;
-
-    if (!id) {
-      throw new Error('Movie ID not found');
-    }
-
+    const type = isMovie.value ? 'movie' : 'tv';
     const response = await fetch(
-      `${BASE_URL}/${route.name === 'movie' ? 'movie' : 'tv'}/${id}?api_key=${API_KEY}&language=ru&append_to_response=credits,images`
+      `${BASE_URL}/${type}/${route.params.id}?api_key=${API_KEY}&language=ru&append_to_response=videos,credits,external_ids`
     );
 
     if (!response.ok) {
-      throw new Error('Failed to fetch movie data');
+      throw new Error('Failed to fetch movie details');
     }
 
-    movieData.value = await response.json();
+    const data = await response.json();
+    movieData.value = data;
+
     if (movieData.value.images?.logos?.length > 0) {
       const ruLogo = movieData.value.images.logos.find(logo => logo.iso_639_1 === 'ru');
       const enLogo = movieData.value.images.logos.find(logo => logo.iso_639_1 === 'en');
       movieData.value.logo_path = (ruLogo || enLogo)?.file_path;
     }
     document.title = `${movieData.value.title || movieData.value.name} | oxyge tv`;
+
+    // Fetch seasons only if it's a series
+    if (!isMovie.value) {
+      await fetchSeasons();
+    }
+
     isLoading.value = false;
 
   } catch (err) {
@@ -122,6 +184,18 @@ onMounted(async () => {
 watch(() => movieData.value, (newData) => {
   if (newData?.title || newData?.name) {
     document.title = `${newData.title || newData.name}`
+  }
+})
+
+const formattedItem = computed(() => {
+  if (!movieData.value) return null;
+
+  return {
+    title: movieData.value.title || movieData.value.name || '',
+    id: movieData.value.id?.toString() || '',
+    imdb_id: movieData.value.imdb_id || '',
+    year: (movieData.value.release_date || movieData.value.first_air_date)?.split('-')[0] || '',
+    // ... другие свойства
   }
 })
 </script>
@@ -192,14 +266,64 @@ watch(() => movieData.value, (newData) => {
                 </span>
               </div>
               <p class="overview" v-if="movieData.overview">{{ movieData.overview }}</p>
+              <div v-if="!isMovie && seasons.length > 0" class="seasons-section">
+                <div class="seasons-header">
+                  <h3>Сезоны</h3>
+                  <div class="seasons-selector">
+                    <select v-model="selectedSeason" class="season-select" :disabled="isLoadingSeasons">
+                      <option v-for="season in seasons"
+                              :key="season.id"
+                              :value="season">
+                        {{ season.name }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                <div v-if="isLoadingSeasons" class="episodes-loading">
+                  <div class="loader"></div>
+                </div>
+
+                <div v-else-if="selectedSeason" class="episodes-list">
+                  <div v-for="episode in selectedSeason.episodes"
+                       :key="episode.id"
+                       class="episode-card">
+                    <div class="episode-image">
+                      <img :src="episode.still_path ?
+                                 `${IMAGE_BASE_URL}/w300${episode.still_path}` :
+                                 'https://via.placeholder.com/300x170/1a1a1a/5f5f5f?text=No+Image'"
+                           :alt="episode.name"
+                           class="episode-still">
+                    </div>
+                    <div class="episode-info">
+                      <div class="episode-header">
+                        <h4>{{ episode.episode_number }}. {{ episode.name }}</h4>
+                        <div class="episode-buttons">
+                          <AllohaPlayer
+                            :tmdbId="route.params.id"
+                            :season="selectedSeason?.season_number"
+                            :episode="episode.episode_number"
+                            :type="contentType"
+                          />
+                        </div>
+                      </div>
+                      <p class="episode-overview">{{ episode.overview || 'Описание отсутствует' }}</p>
+                      <div class="episode-meta">
+                        <span class="air-date">{{ new Date(episode.air_date).toLocaleDateString('ru-RU') }}</span>
+                        <span class="runtime" v-if="episode.runtime">{{ episode.runtime }} мин</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div class="buttons-group">
                 <div class="primary-buttons">
                   <VideoPlayer
-                    :tmdb-id="String(movieData.id)"
-                    :imdb-id="imdbId || ''"
-                    :year="String(new Date(movieData.release_date).getFullYear())"
+                    :tmdb-id="formattedItem.id"
+                    :imdb-id="formattedItem.imdb_id"
+                    :year="formattedItem.year"
                     :type="contentType"
-                    :title="movieData.title"
+                    :title="formattedItem.title"
                     class="watch-button"
                   />
                   <button
@@ -766,6 +890,186 @@ watch(() => movieData.value, (newData) => {
 
   .torrent-button {
     width: 100%;
+  }
+}
+
+.seasons-section {
+  margin-top: 2rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1.5rem;
+  backdrop-filter: blur(10px);
+}
+
+.seasons-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.seasons-header h3 {
+  font-size: 1.5rem;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.season-select {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.episodes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.episode-card {
+  display: flex;
+  gap: 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.episode-image {
+  flex: 0 0 200px;
+  position: relative;
+}
+
+.episode-play-button {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.episode-image:hover .episode-play-button {
+  opacity: 1;
+}
+
+.episode-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.episode-play-button-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .episode-play-button {
+    display: none;
+  }
+
+  .episode-play-button-mobile {
+    display: block;
+  }
+
+  .episode-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}
+
+.episode-still {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.episode-info {
+  flex: 1;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.episode-info h4 {
+  margin: 0 0 0.5rem;
+  color: var(--text-primary);
+  font-size: 1.1rem;
+}
+
+.episode-overview {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0 0 auto;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.episode-meta {
+  margin-top: 1rem;
+  display: flex;
+  gap: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .episode-card {
+    flex-direction: column;
+  }
+
+  .episode-image {
+    flex: 0 0 auto;
+  }
+
+  .episode-still {
+    aspect-ratio: 16/9;
+  }
+
+  .seasons-header {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .season-select {
+    width: 100%;
+  }
+}
+
+/* Добавим стили для прозрачной кнопки воспроизведения */
+:deep(.transparent-play-button) {
+  background: transparent;
+  border: 2px solid white;
+  padding: 8px 16px;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.episode-buttons {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .episode-buttons {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>
