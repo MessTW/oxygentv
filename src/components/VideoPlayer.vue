@@ -6,14 +6,14 @@ const router = useRouter();
 const props = defineProps({
   tmdbId: {
     type: String,
-    required: true
+    default: ''
   },
   imdbId: {
     type: String,
     default: ''
   },
   year: {
-    type: [String, Number],
+    type: String,
     default: ''
   },
   type: {
@@ -22,7 +22,7 @@ const props = defineProps({
   },
   title: {
     type: String,
-    required: true
+    default: ''
   },
   class: {
     type: String,

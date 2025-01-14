@@ -1,4 +1,4 @@
-const ALLOWED_IPS = ['104.28.213.229', 'YOUR_IP_ADDRESS']; // Добавьте сюда разрешенные IP
+const ALLOWED_IPS = ['104.28.213.229', 'localhost']; // Добавьте сюда разрешенные IP
 
 export const checkAdminAccess = async () => {
   try {

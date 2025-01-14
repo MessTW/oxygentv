@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '../views/HomeView.vue'
+import HomePage from '../views/HomePage.vue'
 import SearchView from '../views/SearchView.vue'
-import CinemaDetails from '../views/CinemaDetails.vue'
+import DetailsPage from '../views/DetailsPage.vue'
 import LibraryView from '../views/LibraryView.vue'
 import TorrentPage from '../views/TorrentPage.vue'
 import AdminPanel from '../views/admin/AdminPanel.vue'
@@ -13,9 +13,9 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: HomeView,
+      component: HomePage,
       meta: {
-        title: 'Главная | oxyge tv'
+        title: 'Главная | absolute cinema'
       }
     },
     {
@@ -23,13 +23,13 @@ const router = createRouter({
       name: 'search',
       component: SearchView,
       meta: {
-        title: 'Поиск | oxyge tv'
+        title: 'Поиск | absolute cinema'
       }
     },
     {
       path: '/movie/:id',
       name: 'movie',
-      component: CinemaDetails,
+      component: DetailsPage,
       meta: {
         title: 'Загрузка...'
       }
@@ -37,7 +37,15 @@ const router = createRouter({
     {
       path: '/series/:id',
       name: 'series',
-      component: CinemaDetails,
+      component: DetailsPage,
+      meta: {
+        title: 'Загрузка...'
+      }
+    },
+    {
+      path: '/tv/:id',
+      name: 'tv',
+      component: DetailsPage,
       meta: {
         title: 'Загрузка...'
       }
@@ -47,7 +55,7 @@ const router = createRouter({
       name: 'library',
       component: LibraryView,
       meta: {
-        title: 'Моя бибилиотека | oxyge tv'
+        title: 'Моя бибилиотека | absolute cinema'
       }
     },
     {
@@ -105,6 +113,27 @@ const router = createRouter({
           path: 'users',
           name: 'admin-users',
           component: () => import('../views/admin/UsersManager.vue')
+        }
+      ]
+    },
+    {
+      path: '/collections',
+      children: [
+        {
+          path: '',
+          name: 'collections',
+          component: () => import('../components/SmartCollections.vue'),
+          meta: {
+            title: 'Коллекции | absolute cinema'
+          }
+        },
+        {
+          path: ':slug',
+          name: 'collection',
+          component: () => import('../views/CollectionView.vue'),
+          meta: {
+            title: 'Коллекция | absolute cinema'
+          }
         }
       ]
     }

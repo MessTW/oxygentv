@@ -59,6 +59,9 @@ export const useContentStore = defineStore('content', {
           : `${BASE_URL}/movie/popular?api_key=${API_KEY}&language=ru-RU&page=${page}`
 
         const response = await fetch(url)
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json()
 
         const uniqueIds = new Set()
@@ -78,6 +81,8 @@ export const useContentStore = defineStore('content', {
         this.previousMovies = this.movies
       } catch (error) {
         console.error('Error:', error)
+        this.movies = []
+        return Promise.reject(error)
       } finally {
         ui.setLoading(false)
       }

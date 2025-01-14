@@ -18,7 +18,7 @@ onMounted(async () => {
 
 <template>
   <aside class="sidebar" v-show="isVisible">
-    <div class="logo"><Icon icon="fluent-mdl2:gradle-logo-32" width="30" height="138" /></div>
+    <div class="logo"><Icon icon="mynaui:letter-a-solid" width="30" height="138" /></div>
     <nav>
       <RouterLink to="/" class="nav-item" title="Главная">
         <Icon icon="material-symbols:home-outline" width="24" />
@@ -26,7 +26,7 @@ onMounted(async () => {
       <RouterLink to="/search" class="nav-item" title="Поиск">
         <Icon icon="iconamoon:search-fill" width="24" />
       </RouterLink>
-      <RouterLink to="/library" class="nav-item" title="Избранное">
+      <RouterLink to="/library" class="nav-item" title="Библиотека">
         <Icon icon="proicons:library" width="24" />
       </RouterLink>
       <RouterLink
@@ -36,6 +36,9 @@ onMounted(async () => {
         title="Админ панель"
       >
         <Icon icon="mdi:shield-crown" width="24" />
+      </RouterLink>
+      <RouterLink to="/collections" class="nav-item" title="Коллекции">
+        <Icon icon="mdi:collection" width="24" />
       </RouterLink>
     </nav>
   </aside>
@@ -56,7 +59,6 @@ onMounted(async () => {
 }
 
 .logo {
-  color: var(--accent);
   font-size: 1.5rem;
   font-weight: bold;
   margin-bottom: 2rem;
@@ -85,7 +87,7 @@ nav {
   align-items: center;
   justify-content: center;
   padding: 12px;
-  color: var(--text-secondary);
+  color: snow;
   text-decoration: none;
   position: relative;
   border-radius: 12px;
@@ -102,7 +104,7 @@ nav {
   transform: translateX(-50%);
   width: 0;
   height: 3px;
-  background-color: var(--accent);
+  background-color: snow;
   transition: width 0.2s ease;
 }
 
@@ -115,7 +117,7 @@ nav {
 }
 
 .nav-item.router-link-active {
-  color: var(--accent);
+  color: snow;
 }
 
 @media (max-width: 768px) {
@@ -179,7 +181,7 @@ nav {
   }
 
   .nav-item.router-link-active {
-    color: var(--accent);
+    color: snow;
   }
 }
 </style>
