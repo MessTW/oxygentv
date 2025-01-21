@@ -29,4 +29,11 @@ body {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* Скрываем скроллбар для WebKit браузеров */
+*::-webkit-scrollbar {
+  display: none;
 }

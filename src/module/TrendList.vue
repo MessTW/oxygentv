@@ -1,28 +1,38 @@
 <template>
-  <section class="content-section">
-    <div class="content-section-inner">
-      <h2 class="section-title">{{ title }}</h2>
-      <div class="content-grid">
-        <template v-if="heroStore.isLoading">
-          <div v-for="n in 10" :key="n" class="content-card skeleton">
-            <div class="skeleton-poster"></div>
-          </div>
-        </template>
-        <div
-          v-else
-          v-for="item in filteredItems"
-          :key="item.id"
-          class="content-card"
-          @click="navigateToContent(item)"
-        >
-          <div class="movie-type">{{ item.media_type === 'movie' ? 'Фильм' : 'Сериал' }}</div>
+  <section class="section">
+    <div class="section-header">
+      <h2>{{ title }}</h2>
+    </div>
+    <div v-if="heroStore.isLoading" class="content-grid">
+      <div v-for="n in 10" :key="n" class="content-card skeleton">
+        <div class="skeleton-poster"></div>
+      </div>
+    </div>
+    <div v-else class="content-grid">
+      <div
+        v-for="item in filteredItems"
+        :key="item.id"
+        class="content-card"
+        @click="navigateToContent(item)"
+      >
+        <div class="card-image">
           <LazyImage
-            :src="`https://imagetmdb.com/t/p/w342${item.poster_path}`"
+            :src="`https://imagetmdb.com/t/p/w780${item.backdrop_path}`"
             :alt="getTitle(item)"
+            class="backdrop-image"
           />
-          <div class="content-overlay bottom">
-            <h3 class="content-title">{{ getTitle(item) }}</h3>
-            <div class="release-year">{{ getYear(item) }}</div>
+          <div class="logo-container" v-if="item.images?.logos?.length">
+            <img
+              :src="`https://imagetmdb.com/t/p/w500${getPreferredLogo(item.images.logos).file_path}`"
+              :alt="getTitle(item)"
+              class="logo-image"
+            />
+          </div>
+          <div class="title-fallback" v-else>
+            {{ getTitle(item) }}
+          </div>
+          <div class="title-corner">
+            {{ getTitle(item) }}
           </div>
         </div>
       </div>
@@ -46,21 +56,24 @@ defineProps({
   }
 });
 
-// Фильтруем и сортируем элементы
 const filteredItems = computed(() => {
   return heroStore.trendingItems
-    .filter(item => item.poster_path && (item.media_type === 'movie' || item.media_type === 'tv'))
+    .filter(item => item.backdrop_path && (item.media_type === 'movie' || item.media_type === 'tv'))
     .sort(() => Math.random() - 0.5);
 });
-
-const getYear = (item) => {
-  const date = item.release_date || item.first_air_date;
-  return date ? date.split('-')[0] : '';
-};
 
 const getTitle = (item) => {
   return item.media_type === 'movie' ? item.title : item.name;
 };
+
+const getPreferredLogo = (logos) => {
+  if (!logos?.length) return null
+  const ruLogo = logos.find(logo => logo.iso_639_1 === 'ru')
+  if (ruLogo) return ruLogo
+  const enLogo = logos.find(logo => logo.iso_639_1 === 'en')
+  if (enLogo) return enLogo
+  return logos[0]
+}
 
 const navigateToContent = (item) => {
   const route = item.media_type === 'movie' ? 'movie' : 'series';
@@ -75,188 +88,157 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.content-section {
+.section {
+  margin: -1rem 0;
+  overflow: hidden;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
   padding: 0 4%;
-  margin-bottom: 3rem;
 }
 
-.content-section-inner {
-  max-width: 1800px;
-  margin: 0 auto;
-}
-
-.section-title {
+.section-header h2 {
   font-size: 1.5rem;
-  font-weight: 500;
-  margin-bottom: 1rem;
+  font-weight: 600;
+  color: #fff;
 }
 
 .content-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
+  padding: 0 4%;
 }
 
 .content-card {
   position: relative;
   overflow: hidden;
   cursor: pointer;
-  border-radius: 10px;
-  background: rgba(32, 32, 32, 0.5);
+  transition: transform 0.3s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 .content-card:hover {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  transform: translateY(-5px);
 }
 
-.content-card img {
+.card-image {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16/9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+
+.backdrop-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
-.content-overlay {
+.logo-container {
   position: absolute;
-  left: 0;
-  right: 0;
-  padding: 1rem;
-  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 100%);
-  transition: opacity 0.3s ease;
-}
-
-.content-overlay.bottom {
-  bottom: 0;
+  inset: 0;
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0.1) 100%);
 }
 
-.content-card:hover .content-overlay.top {
-  opacity: 1;
+.logo-image {
+  max-width: 80%;
+  max-height: 80%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.7)) invert(0) !important;
+}
+
+.title-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0.1) 100%);
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.title-corner {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  right: 1rem;
+  color: white;
+  font-size: 1rem;
+  font-weight: 500;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  z-index: 2;
+  text-align: left;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.media-type {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .meta-info {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+  justify-content: center;
 }
 
-.movie-type {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 2;
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: 500;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  padding: 4px 8px;
-  border-radius: 4px;
+.dot {
+  font-size: 0.5rem;
 }
 
-.content-title {
-  font-size: 1rem;
-  color: white;
-  margin: 0;
-  font-weight: 500;
-}
-
-.release-year {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-/* Mobile (до 768px) */
-@media (max-width: 768px) {
-  .content-section {
-    padding: 0 20px;
-  }
-
-  .content-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
-  }
-
-  .content-card {
-    aspect-ratio: 2/3;
-  }
-}
-
-/* Tablet (769px - 1024px) */
-@media (min-width: 769px) {
-  .content-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-
-  .content-card {
-    aspect-ratio: 2/3;
-  }
-}
-
-/* Desktop (>1024px) */
-@media (min-width: 1025px) {
-  .content-grid {
-    grid-template-columns: repeat(5, 1fr);
-  }
-}
-
-/* Skeleton styles */
+/* Skeleton Loading */
 .skeleton {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
   animation: pulse 1.5s infinite;
 }
 
-.skeleton-poster {
-  width: 100%;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.05);
-}
-
 @keyframes pulse {
-  0% { opacity: 0.3; }
-  50% { opacity: 0.1; }
-  100% { opacity: 0.3; }
+  0% { opacity: 0.6; }
+  50% { opacity: 0.3; }
+  100% { opacity: 0.6; }
 }
 
-.trend-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: var(--spacing-base);
-  width: 100%;
-}
-
-.poster {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 8px;
-  transition: transform 0.2s ease;
-  will-change: transform; /* Оптимизация производительности */
-  backface-visibility: hidden; /* Предотвращает мерцание */
-}
-
-.poster-wrapper {
-  position: relative;
-  width: 100%;
-  padding-top: 150%; /* Соотношение сторон 2:3 */
-  overflow: hidden;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.1); /* Placeholder до загрузки */
-}
-
-.poster-wrapper img {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* Оптимизация для мобильных устройств */
+/* Mobile Optimization */
 @media (max-width: 768px) {
-  .trend-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 8px;
+  .section-header {
+    padding: 0 1rem;
+  }
+
+  .content-grid {
+    padding: 0 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1rem;
+  }
+
+  .title-fallback {
+    font-size: 0.9rem;
+  }
+
+  .meta-info {
+    font-size: 0.75rem;
   }
 }
 </style>

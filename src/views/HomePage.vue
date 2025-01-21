@@ -1,84 +1,76 @@
 <template>
   <div class="home-page">
     <!-- Hero Section -->
-    <section class="hero" v-if="trendingMovie"
-             :style="`background-image: linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(20,20,20,1)),
-                     url(https://imagetmdb.com/t/p/original${trendingMovie.backdrop_path})`">
-      <div class="progress-container">
-        <div
-          v-for="(_, index) in maxHeroItems"
-          :key="index"
-          class="progress-item"
-          :class="{ active: index === currentHeroIndex }"
-          @click="switchToSlide(index)"
-        >
-          <div
-            class="progress-bar"
-            :style="{
-              height: getProgressWidth(index),
-              backgroundColor: index === currentHeroIndex ? '#fff' : 'rgba(255, 255, 255, 0.3)'
-            }"
-          ></div>
-        </div>
-      </div>
-      <div class="hero-content">
-        <div class="content-wrapper">
-          <div v-if="networkName" class="network">
-            <span >{{ networkName }}</span>
-          </div>
-          <div class="logo-container">
-            <img
-              v-if="getLogo(trendingMovie)"
-              :src="`https://imagetmdb.com/t/p/w500${getLogo(trendingMovie)}`"
-              :alt="getTitle(trendingMovie)"
-              class="title-logo"
-            >
-            <h1 v-else class="title">{{ getTitle(trendingMovie) }}</h1>
-          </div>
-          <div class="meta-info">
-            <div class="categories">
-              {{ getCategories(trendingMovie) }}
+    <section class="hero-section">
+      <swiper
+        :modules="[Navigation, EffectFade, Autoplay]"
+        :effect="'fade'"
+        :loop="heroItems?.length > 1"
+        :autoplay="{
+          delay: 5000,
+          disableOnInteraction: false,
+        }"
+        :navigation="true"
+        class="hero-swiper"
+      >
+        <swiper-slide v-for="item in heroItems" :key="item.id" class="hero-slide">
+          <div class="hero-background">
+            <div class="hero-background-desktop"
+                 :style="`background-image: url(https://imagetmdb.com/t/p/original${item.backdrop_path})`">
             </div>
-            <span class="dot">|</span>
-            <span class="year">{{ getYear(trendingMovie) }}</span>
-            <span class="dot">|</span>
-            <span class="duration">{{ trendingMovie.media_type === 'movie' ? 'Фильм' : 'Сериал' }} {{ getDuration(trendingMovie) }}</span>
+            <div class="hero-background-mobile"
+                 :style="`background-image: url(https://imagetmdb.com/t/p/original${item.poster_path})`">
+            </div>
+            <div class="network-badge" v-if="item.networks?.[0] || item.production_companies?.[0]">
+              <span class="network-badge-text">{{ getCompanyName(item) }}</span>
+            </div>
+            <div class="hero-gradient"></div>
           </div>
-          <p class="description">
-            {{ truncateDescription(trendingMovie.overview) }}
-          </p>
-          <div class="buttons">
-            <button
-              class="video-button"
-              @click="navigateToDetails(trendingMovie)"
-            >
-              СМОТРЕТЬ СЕЙЧАС
-            </button>
-            <FavoriteButton
-              :item="trendingMovie"
-              :type="trendingMovie.media_type"
-              class="episodes-button"
-            />
+          <div class="hero-content">
+            <div class="content-wrapper">
+              <div class="hero-logo">
+                <div class="logo-container">
+                  <img
+                    v-if="item.images?.logos?.length"
+                    :src="`https://imagetmdb.com/t/p/w500${getPreferredLogo(item.images.logos).file_path}`"
+                    :alt="getTitle(item)"
+                    class="network-logo"
+                  >
+                  <h1 v-else class="title">{{ getTitle(item) }}</h1>
+                </div>
+                <div class="subtitle">{{ getTitle(item) }}</div>
+                <button class="more-button" @click="navigateToDetails(item)">
+                  <Icon icon="mynaui:play-solid" width="34" />
+                  <span>Смотреть</span>
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </swiper-slide>
+      </swiper>
     </section>
-
-    <!-- Trending Section -->
-    <div class="trending-section">
+    <!-- Continue Watching & Trending Sections -->
+    <div class="content-sections">
       <TrendList title="В тренде" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import TrendList from '@/module/TrendList.vue'
 import { useHeroStore } from '@/stores/heroStore'
+import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
-import FavoriteButton from '@/components/FavoriteButton.vue'
+import { Icon } from '@iconify/vue'
+import { Swiper, SwiperSlide } from 'swiper/vue'
+import { Navigation, EffectFade, Autoplay } from 'swiper/modules'
+import 'swiper/css'
+import 'swiper/css/navigation'
+import 'swiper/css/effect-fade'
 
 const heroStore = useHeroStore()
+const authStore = useAuthStore()
 const router = useRouter()
 
 const trendingMovie = ref(null)
@@ -92,35 +84,7 @@ const networkName = ref(null)
 const networkLogo = ref(null)
 const shouldInvertLogo = ref(false)
 
-// Маппинг ID жанров на русские названия
-const genreMap = {
-   28: 'Боевик',
-   12: 'Приключения',
-   16: 'Мультфильм',
-   35: 'Комедия',
-   80: 'Криминал',
-   99: 'Документальный',
-   18: 'Драма',
-   10751: 'Семейный',
-   14: 'Фэнтези',
-   36: 'История',
-   27: 'Ужасы',
-   10402: 'Музыка',
-   9648: 'Детектив',
-   10749: 'Мелодрама',
-   878: 'Фантастика',
-   10770: 'ТВ фильм',
-   53: 'Триллер',
-   10752: 'Военный',
-   37: 'Вестерн',
-   10762: 'Детский',
-   10763: 'Новости',
-   10764: 'Реалити-шоу',
-   10765: 'Научная фантастика',
-   10766: 'Сериал',
-   10767: 'Ток-шоу',
-   10768: 'Война и Политика'
-}
+
 
 // Функция для плавного переключения слайдов
 const smoothTransition = async (nextIndex) => {
@@ -138,20 +102,6 @@ const smoothTransition = async (nextIndex) => {
   progress.value = 0
   isTransitioning.value = false
   startProgress()
-}
-
-// Функция для переключения на конкретный слайд
-const switchToSlide = (index) => {
-  if (index === currentHeroIndex.value || isTransitioning.value) return
-
-  // Сбрасываем все таймеры
-  if (progressInterval) clearInterval(progressInterval)
-  if (slideInterval) clearInterval(slideInterval)
-
-  smoothTransition(index)
-
-  // Перезапускаем автоматическое переключение
-  startSlideShow()
 }
 
 const startProgress = () => {
@@ -234,38 +184,6 @@ const getTitle = (item) => {
     (item.name || item.original_name)
 }
 
-// Функция для получения логотипа
-const getLogo = (item) => {
-  const logos = item?.images?.logos;
-  if (!logos || !logos.length) return null;
-
-  // Ищем логотип в порядке приоритета: ru -> en -> без языка
-  const ruLogo = logos.find(logo => logo.iso_639_1 === 'ru');
-  if (ruLogo) return ruLogo.file_path;
-
-  const enLogo = logos.find(logo => logo.iso_639_1 === 'en');
-  if (enLogo) return enLogo.file_path;
-
-  const noLangLogo = logos.find(logo => !logo.iso_639_1);
-  if (noLangLogo) return noLangLogo.file_path;
-
-  return logos[0].file_path;
-}
-
-// Функция для умного сокращения описания
-const truncateDescription = (text, maxLength = 200) => {
-  if (!text) return '';
-  if (text.length <= maxLength) return text;
-
-  // Обрезаем до максимальной длины
-  const truncated = text.slice(0, maxLength);
-  // Находим последний пробел
-  const lastSpace = truncated.lastIndexOf(' ');
-
-  // Обрезаем до последнего полного слова
-  return truncated.slice(0, lastSpace).trim() + '...';
-}
-
 // Функция для получения телесети или производственной компании
 const getNetwork = async (item) => {
   if (!item) return;
@@ -305,373 +223,445 @@ watch(trendingMovie, async (newMovie) => {
   }
 }, { immediate: true })
 
-const getProgressWidth = (index) => {
-  if (index === currentHeroIndex.value) {
-    return `${progress.value}%`
-  }
-  if (index === (currentHeroIndex.value + 1) % maxHeroItems && progress.value > 90) {
-    return `${(progress.value - 90) * 10}%`
-  }
-  return '0%'
-}
-
-const getYear = (item) => {
-  const date = item.media_type === 'movie' ? item.release_date : item.first_air_date
-  return date ? date.split('-')[0] : ''
-}
-
-const getDuration = (item) => {
-  if (item.media_type === 'tv') {
-    const seasons = item.number_of_seasons;
-    const episodes = item.number_of_episodes;
-    if (!seasons) return '';
-
-    // Функция для правильного склонения слова "сезон"
-    const getSeasonsWord = (num) => {
-      if (num % 10 === 1 && num % 100 !== 11) return 'сезон';
-      if ([2, 3, 4].includes(num % 10) && ![12, 13, 14].includes(num % 100)) return 'сезона';
-      return 'сезонов';
-    };
-
-    return `${seasons} ${getSeasonsWord(seasons)} (${episodes} сери${episodes === 1 ? 'я' : episodes < 5 ? 'и' : 'й'})`;
-  }
-
-  if (!item?.runtime) return '';
-
-  const minutes = item.runtime;
-  if (minutes >= 60) {
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return remainingMinutes > 0 ? `${hours}ч ${remainingMinutes}м` : `${hours}ч`;
-  }
-  return `${minutes}м`;
-}
-
-const getCategories = (item) => {
-  // Проверяем есть ли genre_ids или genres
-  const genres = item.genre_ids || item.genres?.map(g => g.id)
-  if (!genres) return ''
-
-  return genres
-    .map(id => genreMap[id])
-    .filter(name => name)
-    .slice(0, 3) // Ограничиваем до 3 жанров
-    .join(' | ')
-}
-
 const navigateToDetails = (item) => {
-  const route = item.media_type === 'movie' ? 'movie' : 'series';
+  if (!authStore.user && !authStore.demoMode) {
+    router.push('/login')
+    return
+  }
   router.push({
-    name: route,
-    params: { id: item.id },
-    state: { movieData: item } // Передаем данные через state
-  });
+    name: 'cinema-details',
+    params: {
+      type: item.media_type || 'movie',
+      id: item.id
+    }
+  })
+}
+
+const heroItems = computed(() => {
+  return heroStore.trendingItems
+    .filter(item => item.backdrop_path)
+    .slice(0, 6);
+});
+
+const getPreferredLogo = (logos) => {
+  if (!logos?.length) return null;
+  // Сначала ищем русский логотип
+  const ruLogo = logos.find(logo => logo.iso_639_1 === 'ru');
+  if (ruLogo) return ruLogo;
+  // Если русского нет, берем английский
+  const enLogo = logos.find(logo => logo.iso_639_1 === 'en');
+  if (enLogo) return enLogo;
+  // Если ни русского, ни английского нет, берем первый доступный
+  return logos[0];
+};
+
+const getCompanyName = (item) => {
+  if (item.media_type === 'tv' && item.networks?.[0]) {
+    return item.networks[0].name.toUpperCase();
+  }
+  if (item.media_type === 'movie' && item.production_companies?.[0]) {
+    return item.production_companies[0].name.toUpperCase();
+  }
+  return '';
 };
 </script>
 
 <style scoped>
 .home-page {
-  background-color: #141414;
-  min-height: 90vh;
-  color: white;
-  padding-bottom: 2rem;
+  background: #0A0A0A;
+  min-height: 100vh;
+  padding-bottom: 4rem;
+  padding-right: 4rem;
 }
 
-.slide-indicators {
-  position: absolute;
-  top: 50%;
-  right: 48px;
-  transform: translateY(-50%);
+.section-header {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.indicator {
-  width: 3px;
-  height: 20px;
-  background-color: rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-}
-
-.indicator.active {
-  background-color: #fff;
-}
-
-.indicator .progress {
-  height: 100%;
-  background-color: #fff;
-  transition: width 0.1s linear;
-}
-
-.hero {
-  height: 100vh;
-  background-size: cover;
-  background-position: center 20%;
-  position: relative;
-  margin-bottom: -200px;
-  z-index: 1;
-}
-
-.hero-content {
-  position: absolute;
-  bottom: 35%;
-  left: 4%;
-  max-width: 900px;
-}
-
-.content-wrapper {
-  display: flex;
-  flex-direction: column;
-}
-
-.network {
-  height: 32px;
-  margin-bottom: 1rem;
-}
-
-.network-logo {
-  height: 100%;
-  object-fit: contain;
-}
-
-.invert-logo {
-  filter: brightness(0) invert(1);
-}
-
-.network span {
-  color: #e5e5e5;
-  font-size: 1.2rem;
-  letter-spacing: 4px;
-  text-transform: uppercase;
-}
-
-.logo-container {
-  max-width: 100%;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 1.5rem;
 }
 
-.title-logo {
-  max-width: 100%;
-  max-height: 140px;
-  object-fit: contain;
-  filter: drop-shadow(2px 2px 4px rgba(0,0,0,.45));
-}
-
-.title {
-  font-size: 2.8rem;
-  font-weight: 700;
-  color: #fff;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 1.5rem;
-  text-shadow: 2px 2px 4px rgba(0,0,0,.45);
-}
-
-.description {
-  font-size: 1.1rem;
-  line-height: 1.5;
-  color: #e5e5e5;
-  max-width: 500px;
-  margin-bottom: 2rem;
-  text-shadow: 1px 1px 2px rgba(0,0,0,.3);
-  opacity: 0.9;
-}
-
-@media (max-width: 768px) {
-  .hero-content {
-    padding: 0 20px;
-    bottom: 30%;
-  }
-
-  .network {
-    font-size: 1rem;
-  }
-
-  .description {
-    font-size: 0.9rem;
-    margin-bottom: 1.5rem;
-  }
-
-  button {
-    font-size: 1rem;
-    padding: 8px 20px;
-    min-width: 120px;
-  }
-}
-
-.trending-section {
-  position: relative;
-  z-index: 1;
-}
-
-.buttons {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin-top: 2rem;
-}
-
-.video-button,
-.episodes-button {
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 48px;
-  padding: 0 2rem;
-  font-size: 0.9rem;
-  min-width: 160px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border: none;
-  border-radius: 2px;
+.section-header h2 {
+  font-size: 1.5rem;
   font-weight: 600;
-  letter-spacing: 2px;
-}
-
-.video-button {
-  background: snow;
-  color: black;
-}
-
-.episodes-button {
-  background: transparent;
   color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
-.video-button:hover,
-.episodes-button:hover {
-  border-color: #fff;
+.see-all {
+  color: rgba(255, 255, 255, 0.7);
+  background: none;
+  border: none;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
 }
 
-@media (max-width: 768px) {
-  .buttons {
-    flex-direction: column;
-    width: 100%;
-    padding: 0 var(--spacing-base);
-  }
-
-  .video-button {
-    width: 100%;
-  }
+.see-all:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.progress-container {
-  position: absolute;
-  top: 50%;
-  right: 4%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  z-index: 2;
+.content-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
 }
 
-.progress-item {
-  width: 3px;
-  height: 16px;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
+.watching-grid {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.watching-card {
+  position: relative;
+  border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
-  transition: width 0.3s ease, transform 0.3s ease;
+  transition: transform 0.3s ease;
 }
 
-.progress-item:hover,
-.progress-item.active {
-  width: 4px;
-  transform: scaleY(1.2);
-  background: rgba(255, 255, 255, 0.4);
+.watching-card:hover {
+  transform: translateY(-5px);
+}
+
+.watching-card .card-image {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 16/9;
+}
+
+.card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .progress-bar {
-  width: 100%;
-  height: 0%;
-  background: #fff;
-  transition: height 0.025s linear;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
 }
 
-@media (max-width: 768px) {
-  .progress-container {
-    right: 16px;
-  }
+.progress {
+  height: 100%;
+  background: #E50914;
 }
 
-.meta-info {
+.card-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.7) 70%,
+    rgba(0, 0, 0, 0.9) 100%
+  );
+  padding: 1.25rem;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 1rem;
-  font-size: 0.85rem;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.card-content {
   color: #fff;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  font-weight: 500;
 }
 
-.categories {
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #fff;
+}
+
+.episode-info {
+  font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.7);
 }
 
-.dot {
-  color: rgba(255, 255, 255, 0.7);
-  margin: 0 -2px;
-}
-
-.year, .duration {
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: 500;
-}
-
-.type {
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: 500;
-}
-
-.age-rating {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-@media (max-width: 768px) {
-  .meta-info {
-    font-size: 0.9rem;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-}
-
-.buttons {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin-top: 2rem;
-}
-
-.episodes-button {
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 48px;
-  padding: 0 2rem;
-  font-size: 0.9rem;
-  min-width: 160px;
+.play-button {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  border: none;
-  border-radius: 2px;
-  font-weight: 600;
-  background: transparent;
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  letter-spacing: 2px;
-  text-transform: uppercase;
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.episodes-button:hover {
-  border-color: #fff;
+.play-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+/* Swiper Navigation Styles */
+:deep(.swiper-button-next),
+:deep(.swiper-button-prev) {
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+:deep(.swiper-button-next)::after,
+:deep(.swiper-button-prev)::after {
+  font-size: 18px;
+}
+
+:deep(.swiper-button-disabled) {
+  opacity: 0 !important;
+}
+
+@media (max-width: 768px) {
+  .watching-swiper {
+    padding: 0 1rem;
+  }
+
+  :deep(.swiper-slide) {
+    width: 300px;
+    height: 169px;
+  }
+
+  .card-title {
+    font-size: 0.9rem;
+  }
+
+  .episode-info {
+    font-size: 0.75rem;
+  }
+}
+
+.hero-section {
+  position: relative;
+  border-radius: 0 0 24px 24px;
+  overflow: hidden;
+  height: 600px;
+  width: 100%;
+  margin: 0;
+}
+
+.hero-swiper,
+.hero-slide {
+  border-radius: 0 0 24px 24px;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+.hero-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 0 0 24px 24px;
+}
+
+.hero-background-desktop,
+.hero-background-mobile {
+  width: 100%;
+  height: 100%;
+  border-radius: 0 0 24px 24px;
+  background-size: cover;
+  background-position: center top;
+}
+
+.hero-gradient {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.9) 0%,
+    rgba(0, 0, 0, 0.6) 50%,
+    rgba(0, 0, 0, 0.4) 100%
+  );
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 0 0 24px 24px;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 40px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.content-wrapper {
+  padding: 0;
+  width: 100%;
+  max-width: 600px;
+}
+
+.hero-logo {
+  width: 100%;
+}
+
+.logo-container {
+  margin-bottom: 20px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+}
+
+.network-logo {
+  height: auto;
+  max-height: 120px;
+  object-fit: contain;
+}
+
+.network-logo.invert {
+  filter: invert(1);
+}
+
+.title {
+  color: white;
+  font-size: 3rem;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.subtitle {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 1.2rem;
+  margin: 20px 0;
+}
+
+.more-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 12px 24px;
+  border-radius: 12px;
+  color: white;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.more-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Медиа-запрос для мобильных устройств */
+@media (max-width: 768px) {
+  .home-page {
+    padding-right: 0;
+  }
+
+  .hero-section {
+    height: 400px;
+  }
+
+  .hero-content {
+    padding: 0 16px;
+    align-items: flex-end;
+    padding-bottom: 24px;
+  }
+
+  .content-wrapper {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    width: 100%;
+  }
+
+  .hero-logo {
+    width: auto;
+    max-width: 70%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .logo-container {
+    height: 80px;
+    margin-bottom: 8px;
+  }
+
+  .network-logo {
+    max-width: 280px;
+    max-height: 80px;
+  }
+
+  .title {
+    font-size: 1.8rem;
+  }
+
+  .subtitle {
+    font-size: 0.9rem;
+    margin: 0;
+    margin-bottom: 4px;
+  }
+
+  .more-button {
+    position: absolute;
+    right: 40px;
+    bottom: 40px;
+    padding: 12px;
+    font-size: 0.9rem;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(8px);
+    margin-left: auto;
+    border-radius: 50%;
+    width: 56px;
+    height: 56px;
+    justify-content: center;
+  }
+
+  .more-button span {
+    display: none;
+  }
+
+  .more-button .iconify {
+    width: 28px;
+    height: 28px;
+    margin: 0;
+  }
+}
+
+.network-badge {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  z-index: 2;
+}
+
+.network-badge-text {
+  color: white;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .network-badge {
+    top: 1rem;
+    left: 1rem;
+    padding: 0.5rem;
+  }
+
+  .network-badge-text {
+    font-size: 0.8rem;
+  }
 }
 </style>

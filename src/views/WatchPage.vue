@@ -1,265 +1,176 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted, computed, onUnmounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import { getKinopoiskId } from '../services/movieIds';
 import { ALLOHA_BASE_URL, ALLOHA_TOKEN } from '../config/api';
+import { fetchDetails } from '../services/tmdb';
+import { useWatchProgressStore } from '@/stores/watchProgress';
+import { useAuthStore } from '@/stores/auth';
 
-const API_KEY = 'd341436234a2bb8f0adc73114e093ab2';
-
+const route = useRoute();
 const router = useRouter();
-const playerContainer = ref(null);
-const kinopoiskId = ref(null);
-const state = ref({
-  title: '',
-  type: '',
-  id: '',
-  year: '',
-  imdb: '',
-  season: 1,
-  episode: 1,
-  source: ''
-});
-
-try {
-  const data = localStorage.getItem('playerData');
-  if (data) {
-    const parsedData = JSON.parse(data);
-    state.value = {
-      ...state.value,
-      ...parsedData
-    };
-    document.title = `${state.value.title} - Смотреть онлайн`;
-  }
-} catch (error) {
-  console.error('Error parsing player data:', error);
-}
-
-const currentSeason = ref(parseInt(state.value.season) || 1);
-const currentEpisode = ref(parseInt(state.value.episode) || 1);
+const player = ref(null);
+const details = ref(null);
+const currentSeason = ref(1);
+const currentEpisode = ref(1);
 const totalSeasons = ref(1);
 const seasonsData = ref({});
+const watchProgressStore = useWatchProgressStore();
+const authStore = useAuthStore();
+const currentPlayer = ref('alloha');
+
+defineProps({
+  type: String,
+  id: String
+})
+
+onMounted(async () => {
+  const { type, id } = route.params;
+  details.value = await fetchDetails(type, id);
+  details.value.media_type = type;
+
+  if (type === 'tv') {
+    seasonsData.value = details.value.seasons.reduce((acc, season) => {
+      if (season.season_number > 0 && season.episode_count > 0) {
+        acc[season.season_number] = season.episode_count;
+      }
+      return acc;
+    }, {});
+    totalSeasons.value = Math.max(...Object.keys(seasonsData.value));
+
+    if (route.params.season) {
+      currentSeason.value = parseInt(route.params.season);
+      if (!seasonsData.value[currentSeason.value]) {
+        currentSeason.value = 1;
+      }
+    }
+    if (route.params.episode) {
+      currentEpisode.value = parseInt(route.params.episode);
+      if (currentEpisode.value > seasonsData.value[currentSeason.value]) {
+        currentEpisode.value = 1;
+      }
+    }
+  }
+
+  player.value?.addEventListener('ended', handleWatchComplete);
+
+  const title = details.value.title || details.value.name;
+  if (route.params.type === 'tv') {
+    document.title = `${title} - Сезон ${currentSeason.value}, Серия ${currentEpisode.value}`;
+  } else {
+    document.title = title;
+  }
+});
+
+onUnmounted(() => {
+  player.value?.removeEventListener('ended', handleWatchComplete);
+});
 
 const seasonEpisodeParams = computed(() => {
-  if (currentSeason.value && currentEpisode.value) {
+  if (route.params.type === 'tv') {
     return `&hidden=season,episode&season=${currentSeason.value}&episode=${currentEpisode.value}`;
   }
   return '';
 });
 
-const fetchSeasonData = async () => {
-  try {
-    if (state.value.source === 'alloha') {
-      // Получаем данные о сезонах с API
-      const response = await fetch(
-        `https://apitmdb.cub.red/3/tv/${state.value.id}?api_key=${API_KEY}&language=ru`
-      );
-      const data = await response.json();
+const getCurrentSeasonEpisodes = computed(() => {
+  return seasonsData.value[currentSeason.value] || 0;
+});
 
-      if (!data || !data.seasons) {
-        console.error('No seasons data received');
-        seasonsData.value = { 1: 1 };
-        totalSeasons.value = 1;
-        return;
-      }
-
-      // Создаем объект с количеством эпизодов для каждого сезона
-      const seasons = {};
-      data.seasons.forEach(season => {
-        seasons[season.season_number] = season.episode_count;
-      });
-
-      seasonsData.value = seasons;
-      totalSeasons.value = data.seasons.length;
-      return;
-    }
-  } catch (error) {
-    console.error('Error fetching season data:', error);
-    seasonsData.value = { 1: 1 };
-    totalSeasons.value = 1;
-  }
-};
-
-// Функции управления сериями
 const nextEpisode = () => {
   const currentSeasonEpisodes = getCurrentSeasonEpisodes.value;
-
   if (currentEpisode.value < currentSeasonEpisodes) {
-    // Если есть ещё серии в текущем сезоне
     currentEpisode.value++;
+    updateRoute();
   } else if (currentSeason.value < totalSeasons.value) {
-    // Проверяем, есть ли эпизоды в следующем сезоне
     const nextSeasonEpisodes = seasonsData.value[currentSeason.value + 1];
     if (nextSeasonEpisodes > 0) {
-      // Если текущий сезон закончился и есть следующий сезон с сериями
       currentSeason.value++;
       currentEpisode.value = 1;
+      updateRoute();
     }
   }
 };
 
 const previousEpisode = () => {
   if (currentEpisode.value > 1) {
-    // Если не первая серия текущего сезона
     currentEpisode.value--;
+    updateRoute();
   } else if (currentSeason.value > 1) {
-    // Если первая серия сезона, переходим к предыдущему сезону
     currentSeason.value--;
-    currentEpisode.value = getCurrentSeasonEpisodes.value;
+    currentEpisode.value = seasonsData.value[currentSeason.value];
+    updateRoute();
   }
 };
 
-// Следим за изменениями серии/сезона и обновляем URL плеера
-watch([currentSeason, currentEpisode], ([newSeason, newEpisode]) => {
-  if (state.value.source === 'alloha') {
-    // Проверяем, не превышает ли номер эпизода максимальное значение
-    const maxEpisodes = seasonsData.value[newSeason] || 24;
-    if (newEpisode > maxEpisodes) {
-      currentEpisode.value = maxEpisodes;
-      return;
-    }
-
-    state.value.season = newSeason;
-    state.value.episode = newEpisode;
-
-    // Обновляем URL iframe
-    const iframe = document.querySelector('.player-iframe');
-    if (iframe) {
-      const newUrl = `${ALLOHA_BASE_URL}/?token=${ALLOHA_TOKEN}&tmdb=${state.value.id}&hidden=season,episode&season=${newSeason}&episode=${newEpisode}`;
-      if (iframe.src !== newUrl) {  // Добавляем проверку на изменение URL
-        iframe.src = newUrl;
-      }
-    }
-  }
-}, { immediate: true });
-
-// Обновляем computed свойство
-const getCurrentSeasonEpisodes = computed(() => {
-  return seasonsData.value[currentSeason.value] || 0;
-});
-
-document.title = `${state.value.title} - Смотреть онлайн`;
-
-onMounted(async () => {
-  // Обновляем URL с правильным названием
-  const title = state.value.title.toLowerCase().replace(/[^a-zа-яё0-9\s-]/g, '').replace(/\s+/g, '-');
-  if (router.currentRoute.value.params.title !== title) {
-    router.replace({
-      name: 'watch',
-      params: { title }
-    });
-  }
-
-  if (state.value.source === 'alloha') {
-    console.log('Initial state:', {
-      season: currentSeason.value,
-      episode: currentEpisode.value
-    });
-
-    await fetchSeasonData();
-
-    // Обновляем URL плеера сразу после монтирования
-    const iframe = document.querySelector('.player-iframe');
-    if (iframe) {
-      const initialUrl = `${ALLOHA_BASE_URL}/?token=${ALLOHA_TOKEN}&tmdb=${state.value.id}${seasonEpisodeParams.value}`;
-      console.log('Setting initial URL:', initialUrl);
-      iframe.src = initialUrl;
-    }
-    return;
-  }
-
-  if (state.value.type === 'series') {
-    await fetchSeasonData();
-  }
-
-  if (state.value.totalSeasons) {
-    totalSeasons.value = parseInt(state.value.totalSeasons);
-  }
-
-  // Загружаем скрипт kinobox
-  await new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://fridayprivate.vercel.app/assets/js/kinobox.min.js';
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-
-  // Получаем kinopoisk ID
-  if (state.value.title && state.value.year) {
-    kinopoiskId.value = await getKinopoiskId(
-      state.value.title,
-      String(state.value.year)
-    );
-  }
-
-  // Ждем небольшую паузу для уверенности, что DOM обновился
-  await new Promise(resolve => setTimeout(resolve, 100));
-
-  if (window.kbox && playerContainer.value) {
-    const searchParams = {
-      query: kinopoiskId.value
-    };
-
-    console.log('Initializing player with params:', searchParams);
-
-    window.kbox(playerContainer.value, {
-      search: searchParams,
-      sourceList: true,
-      players: {
-        turbo: true,
-        alloha: true,
-        kodik: true,
-        videocdn: true,
-        collaps: true,
-        hdvb: true,
-      },
-      menu: {
-        enable: true,
-        default: 'menu_button',
-        mobile: 'menu_button',
-        format: '{T}',
-        limit: null
-      },
-      autoplay: true,
-      events: {
-        init: function() {
-          console.log('Player initialized');
-        },
-        playerLoaded: function(status, sources) {
-          console.log('Player loaded with params:', searchParams, 'Status:', status, 'Sources:', sources);
-          if (!sources || sources.length === 0) {
-            console.log('No sources found, trying alternative search...');
-            window.kbox(playerContainer.value, {
-              search: {
-                query: state.value.type === 'series' ?
-                  `${state.value.title} ${state.value.year} сериал` :
-                  `${state.value.title} ${state.value.year}`
-              },
-              players: {
-                turbo: true,
-                alloha: true,
-                kodik: true,
-                videocdn: true,
-                collaps: true,
-                hdvb: true,
-              }
-            });
-          }
-        }
-      }
-    });
-  }
-});
-
 const goBack = () => {
-  const playerData = JSON.parse(localStorage.getItem('playerData'));
-  if (playerData) {
-    const routeName = playerData.type === 'tv' ? 'series' : 'movie';
-    router.push({ name: routeName, params: { id: playerData.id } });
-  } else {
-    router.push('/');
+  router.push({
+    name: 'cinema-details',
+    params: {
+      type: route.params.type,
+      id: route.params.id
+    }
+  })
+}
+
+const embedUrl = computed(() => {
+  const { id } = route.params;
+  const baseParams = `tmdb=${id}${seasonEpisodeParams.value}`;
+  return `${ALLOHA_BASE_URL}/?token=${ALLOHA_TOKEN}&${baseParams}`;
+});
+
+const tobacoUrl = computed(() => {
+  const { kpId } = route.params;
+  console.log('Current KinopoiskID in WatchPage:', kpId);
+  if (!kpId) return '';
+
+  if (route.params.type === 'tv') {
+    console.log('Building Tobaco URL for TV show:', `https://api.tobaco.ws/embed/kp/${kpId}?season=${currentSeason.value}&episode=${currentEpisode.value}`);
+    return `https://api.tobaco.ws/embed/kp/${kpId}?season=${currentSeason.value}&episode=${currentEpisode.value}`;
   }
+  console.log('Building Tobaco URL for movie:', `https://api.tobaco.ws/embed/kp/${kpId}`);
+  return `https://api.tobaco.ws/embed/kp/${kpId}`;
+});
+
+const isTobacoAvailable = computed(() => {
+  return !!route.params.kpId;
+});
+
+const updateRoute = () => {
+  router.replace({
+    name: 'watch',
+    params: {
+      type: route.params.type,
+      id: route.params.id,
+      season: currentSeason.value,
+      episode: currentEpisode.value,
+      kpId: route.params.kpId
+    }
+  });
+  onEpisodeChange(currentSeason.value, currentEpisode.value);
+  setTimeout(() => {
+    const title = details.value.title || details.value.name;
+    if (route.params.type === 'tv') {
+      document.title = `${title} - Сезон ${currentSeason.value}, Серия ${currentEpisode.value}`;
+    } else {
+      document.title = title;
+    }
+  }, 100);
+};
+
+const onEpisodeChange = (season, episode) => {
+  if (route.params.type === 'tv') {
+    watchProgressStore.updateProgress(route.params.id, season, episode);
+  }
+};
+
+const handleWatchComplete = async () => {
+  if (!authStore.user?.settings?.trackHistory) return;
+
+  await authStore.updateStats(
+    route.params.type,
+    'watch'
+  );
 };
 </script>
 
@@ -271,8 +182,25 @@ const goBack = () => {
         <span>Назад</span>
       </button>
 
-      <!-- Добавляем элементы управления для сериалов -->
-      <div v-if="state.type === 'tv'" class="episode-controls">
+      <div class="player-switch">
+        <button
+          class="switch-button"
+          :class="{ active: currentPlayer === 'alloha' }"
+          @click="currentPlayer = 'alloha'"
+        >
+          Плеер 1
+        </button>
+        <button
+          class="switch-button"
+          :class="{ active: currentPlayer === 'tobaco' }"
+          @click="currentPlayer = 'tobaco'"
+          :disabled="!isTobacoAvailable"
+        >
+          Плеер 2
+        </button>
+      </div>
+
+      <div v-if="route.params.type === 'tv'" class="episode-controls">
         <button
           class="episode-button"
           @click="previousEpisode"
@@ -292,18 +220,27 @@ const goBack = () => {
         </button>
       </div>
     </div>
-    <div ref="playerContainer" class="player-container">
+
+    <div class="player-container">
       <iframe
-    v-if="state.source === 'alloha'"
-    :src="`${ALLOHA_BASE_URL}/?token=${ALLOHA_TOKEN}&tmdb=${state.id}${seasonEpisodeParams}`"
-    class="player-iframe"
-    frameborder="0"
-    scrolling="no"
-    width="100%"
-    height="100%"
-    allowfullscreen
-    loading="lazy"
-  ></iframe>
+        v-if="currentPlayer === 'alloha'"
+        :src="embedUrl"
+        allow="autoplay; fullscreen"
+        class="video-player"
+        allowfullscreen
+        @load="player = $event.target"
+      ></iframe>
+      <iframe
+        v-else
+        :src="tobacoUrl"
+        allow="autoplay *"
+        class="video-player"
+        allowfullscreen=""
+        webkitallowfullscreen=""
+        mozallowfullscreen=""
+        oallowfullscreen=""
+        msallowfullscreen=""
+      ></iframe>
     </div>
   </div>
 </template>
@@ -348,43 +285,16 @@ const goBack = () => {
   transition: background 0.2s;
   position: absolute;
   left: 16px;
-  z-index: 1;
 }
 
 .back-button:hover {
   background: rgba(255, 255, 255, 0.1);
 }
 
-.title {
-  margin: 0;
-  font-size: 1.2rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: center;
-  width: 100%;
-  padding: 0 64px;
-  position: absolute;
-  left: 0;
-  }
-
-  .player-container {
-    flex: 1;
-    position: relative;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-  }
-
 .episode-controls {
   display: flex;
   align-items: center;
   gap: 1rem;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
 }
 
 .episode-button {
@@ -415,6 +325,13 @@ const goBack = () => {
   text-align: center;
 }
 
+.player-container {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .player-iframe {
   width: 100% !important;
   height: 100% !important;
@@ -437,5 +354,47 @@ const goBack = () => {
     touch-action: auto;
     -webkit-overflow-scrolling: touch;
   }
+
+  .player-switch {
+    position: static;
+    margin-left: auto;
+  }
+}
+
+.video-player {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.player-switch {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0 auto;
+}
+
+.switch-button {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.switch-button.active {
+  background: white;
+  color: black;
+}
+
+.switch-button:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.switch-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 </style>

@@ -1,11 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from '../views/HomePage.vue'
-import SearchView from '../views/SearchView.vue'
-import DetailsPage from '../views/DetailsPage.vue'
-import LibraryView from '../views/LibraryView.vue'
+import SearchPage from '../views/SearchPage.vue'
+import CinemaDetails from '../views/CinemaDetails.vue'
+import LibraryView from '../views/LibraryPage.vue'
 import TorrentPage from '../views/TorrentPage.vue'
-import AdminPanel from '../views/admin/AdminPanel.vue'
-import AdminLogin from '../views/admin/AdminLogin.vue'
+import WatchPage from '../views/WatchPage.vue'
+import SmartCollections from '@/components/SmartCollections.vue'
+import CollectionView from '../views/CollectionView.vue'
+import LoginPage from '../views/LoginPage.vue'
+import ProfilePage from '../views/ProfilePage.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -15,39 +19,44 @@ const router = createRouter({
       name: 'home',
       component: HomePage,
       meta: {
-        title: 'Главная | absolute cinema'
+        title: 'Главная'
       }
     },
     {
-      path: '/search',
+      path: '/search/:query?',
       name: 'search',
-      component: SearchView,
+      component: SearchPage,
       meta: {
-        title: 'Поиск | absolute cinema'
+        title: 'Поиск'
       }
     },
     {
-      path: '/movie/:id',
-      name: 'movie',
-      component: DetailsPage,
+      path: '/:type/:id',
+      name: 'cinema-details',
+      component: CinemaDetails,
       meta: {
-        title: 'Загрузка...'
+        title: 'Загрузка'
       }
     },
     {
-      path: '/series/:id',
-      name: 'series',
-      component: DetailsPage,
-      meta: {
-        title: 'Загрузка...'
-      }
+      path: '/watch/:type/:id',
+      redirect: to => ({
+        name: 'watch',
+        params: {
+          type: to.params.type,
+          id: to.params.id,
+          season: '1',
+          episode: '1',
+          kpId: to.params.kpId
+        }
+      })
     },
     {
-      path: '/tv/:id',
-      name: 'tv',
-      component: DetailsPage,
+      path: '/watch/:type/:id/:season/:episode/:kpId?',
+      name: 'watch',
+      component: WatchPage,
       meta: {
-        title: 'Загрузка...'
+        title: ''
       }
     },
     {
@@ -55,103 +64,96 @@ const router = createRouter({
       name: 'library',
       component: LibraryView,
       meta: {
-        title: 'Моя бибилиотека | absolute cinema'
+        title: 'Библиотека'
       }
     },
     {
-      path: '/movie/:id/torrent',
-      name: 'movie-torrents',
-      component: TorrentPage,
-      meta: {
-        title: 'Загрузка...'
-      }
-    },
-    {
-      path: '/series/:id/torrent',
-      name: 'series-torrents',
-      component: TorrentPage,
-      meta: {
-        title: 'Загрузка...'
-      }
-    },
-    {
-      path: '/watch/:title',
-      name: 'watch',
-      component: () => import('../views/WatchPage.vue'),
-      meta: {
-        title: 'Смотреть'
-      }
-    },
-    {
-      path: '/admin/login',
-      name: 'admin-login',
-      component: AdminLogin,
-      meta: {
-        title: 'Вход в админ-панель'
-      }
-    },
-    {
-      path: '/admin',
-      name: 'admin',
-      component: AdminPanel,
-      meta: {
-        requiresAuth: true,
-        title: 'Админ панель'
-      },
-      children: [
-        {
-          path: 'movies',
-          name: 'admin-movies',
-          component: () => import('../views/admin/MoviesManager.vue')
-        },
-        {
-          path: 'series',
-          name: 'admin-series',
-          component: () => import('../views/admin/SeriesManager.vue')
-        },
-        {
-          path: 'users',
-          name: 'admin-users',
-          component: () => import('../views/admin/UsersManager.vue')
-        }
-      ]
+      path: '/torrent',
+      name: 'torrent',
+      component: TorrentPage
     },
     {
       path: '/collections',
+      meta: {
+        title: 'Коллекции'
+      },
       children: [
         {
           path: '',
           name: 'collections',
-          component: () => import('../components/SmartCollections.vue'),
-          meta: {
-            title: 'Коллекции | absolute cinema'
-          }
+          component: SmartCollections
         },
         {
           path: ':slug',
           name: 'collection',
-          component: () => import('../views/CollectionView.vue'),
-          meta: {
-            title: 'Коллекция | absolute cinema'
-          }
+          component: CollectionView
         }
       ]
+    },
+    {
+      path: '/series/:id',
+      redirect: to => ({
+        name: 'cinema-details',
+        params: { type: 'tv', id: to.params.id }
+      })
+    },
+    {
+      path: '/movie/:id',
+      redirect: to => ({
+        name: 'cinema-details',
+        params: { type: 'movie', id: to.params.id }
+      })
+    },
+    {
+      path: '/login',
+      name: 'login',
+      component: LoginPage,
+      meta: {
+        guest: true,
+        title: 'Вход'
+      }
+    },
+    {
+      path: '/profile',
+      name: 'profile',
+      component: ProfilePage,
+      meta: {
+        requiresAuth: true,
+        title: 'Профиль'
+      }
     }
   ]
 })
 
-router.beforeEach((to, from, next) => {
-  document.title = `${to.meta.title}`
-  if (to.matched.some(record => record.meta.requiresAuth)) {
-    const isAuthenticated = localStorage.getItem('admin_token');
-    if (!isAuthenticated) {
-      next({ name: 'admin-login' });
-    } else {
-      next();
-    }
-  } else {
-    next();
+router.beforeEach(async (to, from, next) => {
+  const authStore = useAuthStore()
+
+  if (!authStore.user && !authStore.loading && !authStore.demoMode) {
+    await authStore.init()
   }
+
+  if (to.meta.guest && authStore.user) {
+    next('/')
+    return
+  }
+
+  if (to.name === 'home') {
+    next()
+    return
+  }
+
+  if (authStore.demoMode) {
+    if (to.meta.requiresAuth) {
+      next('/login')
+      return
+    }
+  }
+
+  next()
+})
+
+router.afterEach((to) => {
+  document.title = to.meta.title || ''
 })
 
 export default router

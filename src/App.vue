@@ -4,12 +4,12 @@ import { onMounted } from 'vue'
 import SideMenu from './components/SideMenu.vue'
 import LoadingScreen from './components/LoadingScreen.vue'
 import { useContentStore } from './stores/content'
-import { useLogoStore } from './stores/logoStore'
 import { useLoadingStore } from './stores/loadingStore'
+import { useAuthStore } from './stores/auth'
 
 const contentStore = useContentStore()
-const logoStore = useLogoStore()
 const loadingStore = useLoadingStore()
+const authStore = useAuthStore()
 const router = useRouter()
 
 // Инициализация приложения
@@ -17,18 +17,17 @@ const initializeApp = async () => {
   try {
     loadingStore.updateProgress(10)
 
-    // Загружаем фильмы
-    await contentStore.fetchMovies()
-    loadingStore.updateProgress(40)
+    // Инициализируем auth store
+    await authStore.init()
+    loadingStore.updateProgress(20)
 
-    // Предварительно загружаем логотипы
-    const moviesToPreload = contentStore.trendingMovies?.slice(0, 5) || []
-    await logoStore.prefetchLogos(
-      moviesToPreload,
-      contentStore.baseUrl,
-      contentStore.apiKey
-    )
-    loadingStore.updateProgress(80)
+    // Загружаем фильмы
+    await Promise.all([
+      contentStore.fetchGenres('movie'),
+      contentStore.fetchGenres('tv'),
+      contentStore.fetchContent(1)
+    ])
+    loadingStore.updateProgress(40)
 
     await new Promise(resolve => setTimeout(resolve, 500))
     loadingStore.updateProgress(100)
@@ -53,7 +52,15 @@ router.beforeEach((to, from, next) => {
 })
 
 onMounted(() => {
-  initializeApp()
+  // Загружаем Google Drive API до инициализации приложения
+  const script = document.createElement('script')
+  script.src = 'https://apis.google.com/js/api.js'
+  script.onload = () => {
+    initializeApp()
+  }
+  document.body.appendChild(script)
+
+  document.documentElement.classList.add('dark-theme')
 })
 </script>
 
